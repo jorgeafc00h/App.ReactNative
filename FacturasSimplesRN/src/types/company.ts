@@ -1,0 +1,279 @@
+// Company types matching Swift implementation
+
+export enum CompanyEnvironment {
+  Development = 'DEVELOPMENT',
+  Production = 'PRODUCTION'
+}
+
+export enum CompanyStatus {
+  Active = 'ACTIVE',
+  Inactive = 'INACTIVE',
+  Suspended = 'SUSPENDED',
+  PendingApproval = 'PENDING_APPROVAL'
+}
+
+export interface Company {
+  id: string;
+  // Basic Info (Step 1 - matches Swift AddCompanyView)
+  nit?: string; // Optional in Swift
+  nombre: string; // "Nombres y Apellidos" - required 
+  nombreComercial: string; // "Nombre Comercial" - required
+  nrc?: string; // Optional in Swift
+  
+  // Contact & Location Info (Step 2 - matches Swift AddCompanyView2)
+  correo: string; // Email - required
+  telefono?: string; // Phone - optional
+  complemento: string; // Address - required
+  departamentoCode: string; // Department code
+  departamento: string; // Department name 
+  municipioCode: string; // Municipality code
+  municipio: string; // Municipality name
+  
+  // Economic Activity & Establishment (Step 3 - matches Swift AddCompanyView3)
+  codActividad: string; // Economic activity code
+  descActividad: string; // Economic activity description
+  tipoEstablecimiento: string; // Establishment type code
+  establecimiento: string; // Establishment type description
+  // MH codes with defaults from Swift
+  codEstableMH: string; // Default "M001"
+  codEstable: string; // Default ""
+  codPuntoVentaMH: string; // Default "P001" 
+  codPuntoVenta: string; // Default ""
+  
+  // Certificate Info (Step 4 - matches Swift AddCompanyView4)
+  certificatePath?: string;
+  certificatePassword?: string;
+  
+  // Environment and certificates
+  environment: CompanyEnvironment;
+  hasValidCertificate: boolean;
+  certificateExpiryDate?: Date;
+  certificateSubject?: string;
+  certificateIssuer?: string;
+  // Visual branding
+  logoUrl?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  // Tax settings
+  taxRegistrationNumber?: string;
+  ivaPercentage: number; // Default 13%
+  retentionPercentage?: number;
+  // Invoice settings
+  invoicePrefix?: string;
+  ccfPrefix?: string;
+  creditNotePrefix?: string;
+  debitNotePrefix?: string;
+  currentInvoiceNumber: number;
+  currentCCFNumber: number;
+  // API credentials (stored securely)
+  hasApiCredentials: boolean;
+  // Status and metadata
+  status: CompanyStatus;
+  isDefault: boolean; // Default selected company
+  userId: string; // Owner user ID
+  createdAt: Date;
+  updatedAt: Date;
+  lastSyncDate?: Date;
+}
+
+export interface CreateCompanyInput {
+  // Basic Info (Step 1)
+  nit?: string;
+  nombre: string;
+  nombreComercial: string;
+  nrc?: string;
+  
+  // Contact & Location Info (Step 2)
+  correo: string;
+  telefono?: string;
+  complemento: string;
+  departamentoCode: string;
+  departamento: string;
+  municipioCode: string;
+  municipio: string;
+  
+  // Economic Activity & Establishment (Step 3)
+  codActividad: string;
+  descActividad: string;
+  tipoEstablecimiento: string;
+  establecimiento: string;
+  codEstableMH: string;
+  codEstable: string;
+  codPuntoVentaMH: string;
+  codPuntoVenta: string;
+  
+  // Certificate Info (Step 4)
+  certificatePath?: string;
+  certificatePassword?: string;
+  
+  environment: CompanyEnvironment;
+  logoUrl?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  ivaPercentage?: number;
+  retentionPercentage?: number;
+  invoicePrefix?: string;
+  ccfPrefix?: string;
+  creditNotePrefix?: string;
+  debitNotePrefix?: string;
+}
+
+export interface UpdateCompanyInput extends Partial<CreateCompanyInput> {
+  id: string;
+  status?: CompanyStatus;
+  isDefault?: boolean;
+  hasValidCertificate?: boolean;
+  certificateExpiryDate?: Date;
+  certificateSubject?: string;
+  certificateIssuer?: string;
+  hasApiCredentials?: boolean;
+  currentInvoiceNumber?: number;
+  currentCCFNumber?: number;
+}
+
+// Company summary for lists and pickers
+export interface CompanySummary {
+  id: string;
+  businessName: string;
+  tradeName?: string;
+  nit: string;
+  environment: CompanyEnvironment;
+  status: CompanyStatus;
+  hasValidCertificate: boolean;
+  isDefault: boolean;
+  logoUrl?: string;
+}
+
+// Company credentials (stored securely)
+export interface CompanyCredentials {
+  companyId: string;
+  nit: string;
+  username: string;
+  password: string;
+  certificateKey?: string;
+  apiKey?: string;
+  environment: CompanyEnvironment;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Certificate information
+export interface CompanyCertificate {
+  companyId: string;
+  certificateData: string; // Base64 encoded
+  privateKey?: string; // Encrypted
+  subject: string;
+  issuer: string;
+  validFrom: Date;
+  validTo: Date;
+  serialNumber: string;
+  fingerprint: string;
+  isValid: boolean;
+  environment: CompanyEnvironment;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Company settings
+export interface CompanySettings {
+  companyId: string;
+  // Invoice settings
+  autoGenerateNumbers: boolean;
+  allowBackdatedInvoices: boolean;
+  requireCustomerForInvoices: boolean;
+  defaultInvoiceTerms?: string;
+  defaultInvoiceNotes?: string;
+  // Email settings
+  emailFromName?: string;
+  emailFromAddress?: string;
+  emailSignature?: string;
+  autoSendInvoices: boolean;
+  // Backup settings
+  autoBackupEnabled: boolean;
+  backupFrequency?: 'DAILY' | 'WEEKLY' | 'MONTHLY';
+  // Notification settings
+  notifyOnInvoiceCompleted: boolean;
+  notifyOnCertificateExpiry: boolean;
+  notifyOnSyncErrors: boolean;
+  // Other settings
+  timezone: string;
+  currency: string;
+  dateFormat: string;
+  numberFormat: string;
+  updatedAt: Date;
+}
+
+// Company statistics
+export interface CompanyStats {
+  companyId: string;
+  totalInvoices: number;
+  totalRevenue: number;
+  totalCustomers: number;
+  totalProducts: number;
+  averageInvoiceAmount: number;
+  monthlyRevenue: { month: string; revenue: number }[];
+  topCustomers: { customerId: string; customerName: string; totalSpent: number }[];
+  topProducts: { productId: string; productName: string; totalSold: number }[];
+  lastCalculated: Date;
+}
+
+// Company search and filter types
+export interface CompanyFilters {
+  status?: CompanyStatus[];
+  environment?: CompanyEnvironment[];
+  hasValidCertificate?: boolean;
+  city?: string;
+  department?: string;
+  userId?: string;
+}
+
+export interface CompanySearchParams extends CompanyFilters {
+  searchTerm?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: 'businessName' | 'nit' | 'createdAt' | 'lastSyncDate';
+  sortOrder?: 'asc' | 'desc';
+}
+
+// Company state for Redux
+export interface CompanyState {
+  companies: Company[];
+  currentCompany: Company | null;
+  selectedCompanyId: string | null;
+  companySettings: CompanySettings | null;
+  companyStats: CompanyStats | null;
+  loading: boolean;
+  error: string | null;
+  searchTerm: string;
+  filters: CompanyFilters;
+}
+
+// Company validation types
+export interface CompanyValidationErrors {
+  businessName?: string;
+  nit?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  department?: string;
+  economicActivity?: string;
+  environment?: string;
+}
+
+// Production access request
+export interface ProductionAccessRequest {
+  id: string;
+  companyId: string;
+  requestedBy: string;
+  requestDate: Date;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvedBy?: string;
+  approvalDate?: Date;
+  rejectionReason?: string;
+  businessJustification: string;
+  expectedVolume: number;
+  documents: string[]; // URLs to uploaded documents
+  createdAt: Date;
+  updatedAt: Date;
+}

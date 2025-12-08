@@ -8,8 +8,8 @@ import { combineReducers } from '@reduxjs/toolkit';
 import authSlice from './slices/authSlice';
 import appSlice from './slices/appSlice';
 import companySlice from './slices/companySlice';
-import invoiceSlice from './slices/invoiceSlice';
-import customerSlice from './slices/customerSlice';
+import invoiceReducer from './slices/invoiceSlice';
+import customerReducer from './slices/customerSlice';
 import productSlice from './slices/productSlice';
 import catalogSlice from './slices/catalogSlice';
 
@@ -45,13 +45,27 @@ const catalogPersistConfig = {
   blacklist: ['loading', 'error', 'searchTerm', 'filters'], // Don't persist UI state
 };
 
+const customerPersistConfig = {
+  key: 'customers',
+  storage: AsyncStorage,
+  whitelist: ['customers', 'selectedCustomerId', 'lastUpdatedAt'],
+  blacklist: ['loading', 'error', 'searchTerm'],
+};
+
+const invoicePersistConfig = {
+  key: 'invoices',
+  storage: AsyncStorage,
+  whitelist: ['invoices', 'selectedInvoiceId', 'pendingSync', 'lastSyncDate'],
+  blacklist: ['loading', 'error', 'searchTerm'],
+};
+
 // Create root reducer with persistence
 const rootReducer = combineReducers({
   auth: persistReducer(authPersistConfig, authSlice),
   app: persistReducer(appPersistConfig, appSlice),
   companies: persistReducer(companyPersistConfig, companySlice),
-  invoices: invoiceSlice, // No persistence for now (Phase 2)
-  customers: customerSlice, // No persistence for now (Phase 2)
+  invoices: persistReducer(invoicePersistConfig, invoiceReducer),
+  customers: persistReducer(customerPersistConfig, customerReducer),
   products: productSlice, // No persistence for now (Phase 2)
   catalogs: persistReducer(catalogPersistConfig, catalogSlice),
 });

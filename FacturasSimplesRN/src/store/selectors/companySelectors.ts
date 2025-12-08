@@ -59,10 +59,10 @@ export const selectFilteredCompanies = createSelector(
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       filteredCompanies = filteredCompanies.filter(company =>
-        company.businessName.toLowerCase().includes(term) ||
-        company.tradeName?.toLowerCase().includes(term) ||
-        company.nit.toLowerCase().includes(term) ||
-        company.email.toLowerCase().includes(term)
+        company.nombre.toLowerCase().includes(term) ||
+        company.nombreComercial?.toLowerCase().includes(term) ||
+        company.nit?.toLowerCase().includes(term) ||
+        company.correo.toLowerCase().includes(term)
       );
     }
 
@@ -87,13 +87,13 @@ export const selectFilteredCompanies = createSelector(
 
     if (filters.city) {
       filteredCompanies = filteredCompanies.filter(company =>
-        company.city.toLowerCase().includes(filters.city!.toLowerCase())
+        company.municipio.toLowerCase().includes(filters.city!.toLowerCase())
       );
     }
 
     if (filters.department) {
       filteredCompanies = filteredCompanies.filter(company =>
-        company.department === filters.department
+        company.departamento === filters.department
       );
     }
 
@@ -209,9 +209,9 @@ export const selectCompanyDisplayInfo = (companyId: string) => createSelector(
       };
     }
 
-    const displayName = company.tradeName || company.businessName;
+    const displayName = company.nombreComercial || company.nombre;
     const subtitle = `${company.nit} • ${company.environment}`;
-    const initials = company.businessName
+    const initials = company.nombre
       .split(' ')
       .map(word => word.charAt(0))
       .join('')

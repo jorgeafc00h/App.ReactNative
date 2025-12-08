@@ -1,28 +1,150 @@
-// Customer selectors - placeholder for Phase 2
+// Customer selectors aligned with Swift functionality
 
 import { createSelector } from '@reduxjs/toolkit';
 import { RootState } from '../index';
+import { CustomerType } from '../../types/customer';
 
-export const selectCustomers = (state: RootState) => state.customers;
+export const selectCustomerState = (state: RootState) => state.customers;
 
 export const selectAllCustomers = createSelector(
-  [selectCustomers],
-  (customers) => customers.customers
-);
-
-export const selectCurrentCustomer = createSelector(
-  [selectCustomers],
-  (customers) => customers.currentCustomer
+  [selectCustomerState],
+  (state) => state.customers
 );
 
 export const selectCustomersLoading = createSelector(
-  [selectCustomers],
-  (customers) => customers.loading
+  [selectCustomerState],
+  (state) => state.loading
 );
 
 export const selectCustomersError = createSelector(
-  [selectCustomers],
-  (customers) => customers.error
+  [selectCustomerState],
+  (state) => state.error
 );
 
-// Placeholder - will be expanded in Phase 2
+export const selectCustomerSearchTerm = createSelector(
+  [selectCustomerState],
+  (state) => state.searchTerm
+);
+
+export const selectCustomerFilters = createSelector(
+  [selectCustomerState],
+  (state) => state.filters
+);
+
+export const selectSelectedCustomerId = createSelector(
+  [selectCustomerState],
+  (state) => state.selectedCustomerId
+);
+
+export const selectCurrentCustomer = createSelector(
+  [selectCustomerState],
+  (state) => state.currentCustomer
+);
+
+export const selectCustomerById = (customerId: string) =>
+  createSelector([selectAllCustomers], (customers) =>
+    customers.find((customer) => customer.id === customerId) || null
+  );
+
+export const selectFilteredCustomers = createSelector(
+  [selectAllCustomers, selectCustomerSearchTerm, selectCustomerFilters],
+  (customers, searchTerm, filters) => {
+    let results = [...customers];
+
+    if (filters.companyId) {
+      results = results.filter((customer) => customer.companyId === filters.companyId);
+    }
+
+    if (filters.isActive !== undefined) {
+      results = results.filter((customer) => customer.isActive === filters.isActive);
+    }
+
+    if (filters.customerType && filters.customerType.length > 0) {
+      results = results.filter((customer) => filters.customerType!.includes(customer.customerType));
+    }
+
+    if (filters.hasContributorRetention !== undefined) {
+      results = results.filter(
+        (customer) => customer.hasContributorRetention === filters.hasContributorRetention
+      );
+    }
+
+    if (filters.departmentCode) {
+      results = results.filter((customer) => customer.departmentCode === filters.departmentCode);
+    }
+
+    if (filters.municipalityCode) {
+      results = results.filter((customer) => customer.municipalityCode === filters.municipalityCode);
+    }
+
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      results = results.filter((customer) => {
+        const fullName = `${customer.firstName} ${customer.lastName}`.toLowerCase();
+        return (
+          fullName.includes(term) ||
+          customer.businessName?.toLowerCase().includes(term) ||
+          customer.email.toLowerCase().includes(term) ||
+          customer.nationalId.toLowerCase().includes(term) ||
+          customer.nrc?.toLowerCase().includes(term)
+        );
+      });
+    }
+
+    return results.sort((a, b) => a.firstName.localeCompare(b.firstName));
+  }
+);
+
+export const selectCustomerSummaries = createSelector(
+  [selectFilteredCustomers],
+  (customers) =>
+    customers.map((customer) => ({
+      id: customer.id,
+      displayName: customer.businessName || `${customer.firstName} ${customer.lastName}`,
+      subtitle: `${customer.documentType}: ${customer.nationalId}`,
+      type: customer.customerType,
+      city: customer.city,
+      department: customer.department,
+      hasRetention: customer.hasContributorRetention,
+    }))
+);
+
+export const selectCustomerStats = createSelector([selectAllCustomers], (customers) => {
+  const total = customers.length;
+  const actives = customers.filter((c) => c.isActive).length;
+  const businesses = customers.filter((c) => c.customerType === CustomerType.Business).length;
+  const individuals = customers.filter((c) => c.customerType === CustomerType.Individual).length;
+  const withRetention = customers.filter((c) => c.hasContributorRetention).length;
+
+  return {
+    total,
+    actives,
+    inactive: total - actives,
+    businesses,
+    individuals,
+    governments: customers.filter((c) => c.customerType === CustomerType.Government).length,
+    withRetention,
+    withoutRetention: total - withRetention,
+  };
+});
+
+export const selectRecentCustomers = createSelector([selectAllCustomers], (customers) =>
+  [...customers]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5)
+);
+
+// ✅ OPTIMIZED: Company-specific customers selector
+export const selectCustomersByCompanyId = (companyId: string) =>
+  createSelector([selectAllCustomers], (customers) =>
+    customers.filter((customer) => customer.companyId === companyId)
+  );
+
+// ✅ OPTIMIZED: Current company's customers
+export const selectCurrentCompanyCustomers = createSelector(
+  [selectAllCustomers, (state: RootState) => state.companies.selectedCompanyId],
+  (customers, selectedCompanyId) => 
+    selectedCompanyId 
+      ? customers.filter((customer) => customer.companyId === selectedCompanyId)
+      : []
+);

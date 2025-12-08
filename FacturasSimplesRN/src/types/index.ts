@@ -7,6 +7,9 @@ export * from './product';
 export * from './company';
 export * from './catalog';
 export * from './dte';
+export * from './email';
+export * from './promo';
+export * from './purchase';
 
 // API and service types
 export interface ApiResponse<T = any> {

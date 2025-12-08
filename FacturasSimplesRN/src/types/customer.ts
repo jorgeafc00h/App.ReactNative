@@ -18,25 +18,31 @@ export interface Customer {
   id: string;
   firstName: string;
   lastName: string;
-  businessName?: string; // For business customers
-  nationalId: string; // DUI, NIT, etc.
+  businessName?: string;
+  nationalId: string;
   documentType: CustomerDocumentType;
   email: string;
   phone: string;
   address?: string;
   city?: string;
   department?: string;
+  departmentCode?: string;
+  municipality?: string;
+  municipalityCode?: string;
   country?: string;
   postalCode?: string;
   hasContributorRetention: boolean;
   customerType: CustomerType;
   isActive: boolean;
-  companyId: string; // Associated company
-  // Tax information
+  companyId: string;
+  codActividad?: string;
+  descActividad?: string;
+  documentTypeCatalogCode?: string;
   taxRegistrationNumber?: string;
-  economicActivity?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  nrc?: string;
+  shouldSyncToCloud?: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateCustomerInput {
@@ -50,13 +56,20 @@ export interface CreateCustomerInput {
   address?: string;
   city?: string;
   department?: string;
+  departmentCode?: string;
+  municipality?: string;
+  municipalityCode?: string;
   country?: string;
   postalCode?: string;
   hasContributorRetention?: boolean;
   customerType: CustomerType;
   companyId: string;
+  codActividad?: string;
+  descActividad?: string;
   taxRegistrationNumber?: string;
-  economicActivity?: string;
+  nrc?: string;
+  documentTypeCatalogCode?: string;
+  shouldSyncToCloud?: boolean;
 }
 
 export interface UpdateCustomerInput extends Partial<CreateCustomerInput> {
@@ -75,6 +88,8 @@ export interface CustomerSummary {
   phone: string;
   customerType: CustomerType;
   isActive: boolean;
+  department?: string;
+  municipality?: string;
 }
 
 // Customer search and filter types
@@ -85,6 +100,9 @@ export interface CustomerFilters {
   companyId?: string;
   city?: string;
   department?: string;
+  departmentCode?: string;
+  municipalityCode?: string;
+  searchTerm?: string;
 }
 
 export interface CustomerSearchParams extends CustomerFilters {
@@ -99,10 +117,12 @@ export interface CustomerSearchParams extends CustomerFilters {
 export interface CustomerState {
   customers: Customer[];
   currentCustomer: Customer | null;
+  selectedCustomerId: string | null;
   loading: boolean;
   error: string | null;
   searchTerm: string;
   filters: CustomerFilters;
+  lastUpdatedAt?: string;
 }
 
 // Customer validation types

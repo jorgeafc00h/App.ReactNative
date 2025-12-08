@@ -22,7 +22,7 @@ export enum InvoiceType {
 export interface Invoice {
   id: string;
   invoiceNumber: string;
-  date: Date;
+  date: string;
   status: InvoiceStatus;
   customerId?: string;
   invoiceType: InvoiceType;
@@ -46,41 +46,48 @@ export interface Invoice {
   shouldSyncToCloud: boolean;
   companyId: string;
   items: InvoiceDetail[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
+  totals?: InvoiceCalculations;
 }
 
 export interface InvoiceDetail {
   id: string;
   quantity: number;
   productId: string;
-  invoiceId: string;
+  productName: string;
   obsItem: string;
   exportaciones?: number;
-  createdAt: Date;
-  updatedAt: Date;
+  unitPrice: number;
+  createdAt: string;
+  updatedAt: string;
+  invoiceId?: string;
 }
 
 export interface InvoiceDetailInput {
   quantity: number;
   productId: string;
+  productName?: string;
+  unitPrice?: number;
   obsItem?: string;
   exportaciones?: number;
 }
 
 export interface CreateInvoiceInput {
   invoiceNumber: string;
-  date: Date;
+  date: string;
   customerId?: string;
   invoiceType: InvoiceType;
   companyId: string;
   items: InvoiceDetailInput[];
+  documentType?: string;
   // Delivery info for remission notes
   nombEntrega?: string;
   docuEntrega?: string;
   observaciones?: string;
   receptor?: string;
   receptorDocu?: string;
+  customerHasRetention?: boolean;
 }
 
 export interface UpdateInvoiceInput extends Partial<CreateInvoiceInput> {
@@ -89,6 +96,7 @@ export interface UpdateInvoiceInput extends Partial<CreateInvoiceInput> {
   generationCode?: string;
   controlNumber?: string;
   receptionSeal?: string;
+  totals?: InvoiceCalculations;
 }
 
 // Computed properties helpers
@@ -109,7 +117,7 @@ export interface InvoiceCalculations {
 export interface InvoiceSummary {
   id: string;
   invoiceNumber: string;
-  date: Date;
+  date: string;
   status: InvoiceStatus;
   invoiceType: InvoiceType;
   totalAmount: number;
@@ -121,8 +129,8 @@ export interface InvoiceSummary {
 export interface InvoiceFilters {
   status?: InvoiceStatus[];
   invoiceType?: InvoiceType[];
-  dateFrom?: Date;
-  dateTo?: Date;
+  dateFrom?: string;
+  dateTo?: string;
   customerId?: string;
   companyId?: string;
 }
@@ -139,10 +147,11 @@ export interface InvoiceSearchParams extends InvoiceFilters {
 export interface InvoiceState {
   invoices: Invoice[];
   currentInvoice: Invoice | null;
+  selectedInvoiceId: string | null;
   loading: boolean;
   error: string | null;
   searchTerm: string;
   filters: InvoiceFilters;
   pendingSync: string[]; // Invoice IDs pending cloud sync
-  lastSyncDate?: Date;
+  lastSyncDate?: string;
 }

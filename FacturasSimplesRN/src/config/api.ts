@@ -2,24 +2,28 @@
 
 export const API_CONFIG = {
   production: {
-    baseUrl: 'https://k-invoices-api.azurewebsites.net',
-    environmentCode: 'PROD'
+    baseUrl: 'https://k-invoices-api-prod.azurewebsites.net/api',
+    environmentCode: '01', // Matches Swift exactly
+    qrUrlBase: 'https://admin.factura.gob.sv/consultaPublica/',
   },
   development: {
-    baseUrl: 'https://k-invoices-api-dev.azurewebsites.net',
-    environmentCode: 'DEV'
+    baseUrl: 'https://k-invoices-api-dev.azurewebsites.net/api', 
+    environmentCode: '00', // Matches Swift exactly
+    qrUrlBase: 'https://test7.mh.gob.sv/ssc/consulta/fe/',
   },
-  timeout: 120000, // 2 minutes - matches Swift implementation
-  apiKey: process.env.EXPO_PUBLIC_API_KEY || 'your-api-key-here'
+  timeout: 90000, // 90 seconds - matches Swift HttpDefaultTimeOut exactly
+  apiKey: 'eyJhbGciOiJFUzI1NiIsImtpZCI6IlVSS0VZSUQwMDEifQ', // Matches Swift exactly
+  includedTax: 1.13, // Matches Swift exactly
+  roundingScale: 2, // Matches Swift exactly
 };
 
-// API Header constants (matching Swift implementation)
+// API Header constants (matching Swift implementation exactly)
 export const API_HEADERS = {
-  API_KEY: 'apiKey',
-  MH_USER: 'mhUser',
-  MH_KEY: 'mhKey',
-  CERTIFICATE_KEY: 'certificateKey',
-  INVOICE_NUMBER: 'invoiceNumber',
+  API_KEY: 'apiKey', // ApiKeyHeaderName
+  MH_USER: 'MH_USER', // Matches Swift constant exactly
+  MH_KEY: 'MH_KEY', // Matches Swift constant exactly  
+  CERTIFICATE_KEY: 'key', // CertificateKey - matches Swift exactly
+  INVOICE_NUMBER: 'reference', // InvoiceNumber - matches Swift exactly
   USER_ID: 'userId',
   AUTHORIZATION: 'Authorization',
   CONTENT_TYPE: 'Content-Type'
@@ -32,8 +36,8 @@ export const getApiConfig = (isProduction: boolean) => {
 
 // API endpoints
 export const API_ENDPOINTS = {
-  // Catalog endpoints
-  CATALOG: '/api/catalog',
+  // Catalog endpoints  
+  CATALOG: '/catalog',
   
   // Document/DTE endpoints
   DOCUMENT_UPLOAD: '/document/upload',

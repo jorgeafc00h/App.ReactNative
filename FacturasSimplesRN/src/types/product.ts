@@ -58,8 +58,8 @@ export interface Product {
   numeroTarifa?: string; // Tariff number for exports
   companyId: string;
   isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateProductInput {
@@ -120,8 +120,8 @@ export interface ProductCategory {
   parentCategoryId?: string;
   isActive: boolean;
   companyId: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Product brands
@@ -132,8 +132,8 @@ export interface ProductBrand {
   logoUrl?: string;
   isActive: boolean;
   companyId: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Product suppliers
@@ -146,8 +146,8 @@ export interface ProductSupplier {
   address?: string;
   isActive: boolean;
   companyId: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Product search and filter types

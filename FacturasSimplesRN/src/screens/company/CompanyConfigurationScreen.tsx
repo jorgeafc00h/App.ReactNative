@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { createCompany, updateCompany } from '../../store/slices/companySlice';
+import { createCompany, updateCompany, fetchCompanies, setSelectedCompany } from '../../store/slices/companySlice';
 import { CreateCompanyInput, CompanyEnvironment } from '../../types/company';
 import { CertificateUpload } from '../../components/CertificateUpload';
 import { CatalogDropdown } from '../../components/CatalogDropdown';
@@ -28,16 +28,33 @@ export const CompanyConfigurationScreen: React.FC<CompanyConfigurationScreenProp
 }) => {
   const dispatch = useAppDispatch();
   
+  // Load companies and current company data
+  const { companies, currentCompany, loading } = useAppSelector(state => state.companies);
+  
   // Combined company data that accumulates across all steps
   const [companyData, setCompanyData] = useState<Partial<CreateCompanyInput>>({
     environment: CompanyEnvironment.Development,
   });
   
-  // Load existing company data on mount
-  const currentCompany = useAppSelector(state => state.companies.currentCompany);
+  // Fetch companies on mount to get the first saved company
+  useEffect(() => {
+    console.log('CompanyConfigurationScreen: Fetching companies on mount');
+    dispatch(fetchCompanies());
+  }, [dispatch]);
   
+  // Load existing company data when companies are loaded
+  useEffect(() => {
+    if (companies.length > 0 && !currentCompany) {
+      // Load the first company (like Swift UI app behavior)
+      console.log('CompanyConfigurationScreen: Setting first company as current', companies[0]);
+      dispatch(setSelectedCompany(companies[0].id));
+    }
+  }, [companies, currentCompany, dispatch]);
+  
+  // Initialize form fields when currentCompany is available
   useEffect(() => {
     if (currentCompany) {
+      console.log('CompanyConfigurationScreen: Loading company data into forms', currentCompany);
       // Load existing company data into form fields
       setFiscalData({
         nit: currentCompany.nit || '',
@@ -71,6 +88,36 @@ export const CompanyConfigurationScreen: React.FC<CompanyConfigurationScreenProp
         certificatePath: currentCompany.certificatePath || '',
         password: '',
         confirmPassword: '',
+      });
+      
+      // Also update the accumulated company data
+      setCompanyData({
+        environment: CompanyEnvironment.Development,
+        // Basic info
+        nit: currentCompany.nit || '',
+        nombre: currentCompany.nombre || '',
+        nombreComercial: currentCompany.nombreComercial || '',
+        nrc: currentCompany.nrc || '',
+        // Contact & location
+        correo: currentCompany.correo || '',
+        telefono: currentCompany.telefono || '',
+        complemento: currentCompany.complemento || '',
+        departamentoCode: currentCompany.departamentoCode || '',
+        departamento: currentCompany.departamento || '',
+        municipioCode: currentCompany.municipioCode || '',
+        municipio: currentCompany.municipio || '',
+        // Economic activity & establishment
+        codActividad: currentCompany.codActividad || '',
+        descActividad: currentCompany.descActividad || '',
+        tipoEstablecimiento: currentCompany.tipoEstablecimiento || '',
+        establecimiento: currentCompany.establecimiento || '',
+        codEstableMH: currentCompany.codEstableMH || 'M001',
+        codEstable: currentCompany.codEstable || '',
+        codPuntoVentaMH: currentCompany.codPuntoVentaMH || 'P001',
+        codPuntoVenta: currentCompany.codPuntoVenta || '',
+        // Certificate
+        certificatePath: currentCompany.certificatePath || '',
+        certificatePassword: '',
       });
     }
   }, [currentCompany]);
@@ -162,7 +209,7 @@ export const CompanyConfigurationScreen: React.FC<CompanyConfigurationScreenProp
       const updatedCompanyData = { ...companyData, ...stepData };
       setCompanyData(updatedCompanyData);
 
-      // If this is the last step, create the company
+      // If this is the last step, create or update the company
       if (step === 4) {
         // Ensure we have all required fields
         const completeCompanyData: CreateCompanyInput = {
@@ -196,26 +243,39 @@ export const CompanyConfigurationScreen: React.FC<CompanyConfigurationScreenProp
           ivaPercentage: 13,
         };
 
-        console.log('Creating company with data:', completeCompanyData);
+        console.log('Saving company with data:', completeCompanyData);
         
         try {
-          await dispatch(createCompany(completeCompanyData)).unwrap();
-          Alert.alert(
-            'Empresa Creada',
-            'Su empresa ha sido configurada exitosamente',
-            [{ text: 'OK', onPress: onComplete }]
-          );
+          if (currentCompany && currentCompany.id) {
+            // Update existing company
+            console.log('Updating existing company:', currentCompany.id);
+            await dispatch(updateCompany({
+              id: currentCompany.id,
+              ...completeCompanyData
+            })).unwrap();
+            Alert.alert(
+              'Empresa Actualizada',
+              'Su empresa ha sido actualizada exitosamente',
+              [{ text: 'OK', onPress: onComplete }]
+            );
+          } else {
+            // Create new company
+            console.log('Creating new company');
+            await dispatch(createCompany(completeCompanyData)).unwrap();
+            Alert.alert(
+              'Empresa Creada',
+              'Su empresa ha sido configurada exitosamente',
+              [{ text: 'OK', onPress: onComplete }]
+            );
+          }
         } catch (error) {
-          console.error('Failed to create company:', error);
-          Alert.alert('Error', 'No se pudo crear la empresa. Inténtelo de nuevo.');
+          console.error('Failed to save company:', error);
+          Alert.alert('Error', 'No se pudo guardar la empresa. Inténtelo de nuevo.');
         }
       } else {
-        // For steps 1-3, just show success and continue
-        Alert.alert(
-          'Éxito', 
-          `Paso ${step} completado correctamente`,
-          [{ text: 'OK', onPress: onComplete }]
-        );
+        // For steps 1-3, save step data to local state and continue
+        console.log(`Step ${step} completed, data saved locally:`, stepData);
+        onComplete();
       }
     } catch (error) {
       console.error('Error saving step data:', error);
@@ -539,6 +599,14 @@ export const CompanyConfigurationScreen: React.FC<CompanyConfigurationScreenProp
     }
   };
 
+  if (loading && !currentCompany) {
+    return (
+      <View style={[styles.wrapper, styles.centerContent]}>
+        <Text style={styles.loadingText}>Cargando información de la empresa...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.wrapper}>
       {renderCurrentStep()}
@@ -548,9 +616,9 @@ export const CompanyConfigurationScreen: React.FC<CompanyConfigurationScreenProp
           <Text style={styles.skipButtonText}>Omitir por ahora</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+        <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
           <Text style={styles.saveButtonText}>
-            {step === 4 ? 'Continuar' : 'Guardar y Continuar'}
+            {loading ? 'Guardando...' : (step === 4 ? 'Continuar' : 'Guardar y Continuar')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -652,17 +720,6 @@ const styles = StyleSheet.create({
     color: '#4A5568',
     textAlign: 'center',
     marginBottom: 10,
-  },
-  linkButton: {
-    backgroundColor: '#38A169',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  linkButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '500',
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -787,5 +844,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#4A5568',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#4A5568',
+    textAlign: 'center',
   },
 });

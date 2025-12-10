@@ -17,6 +17,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { CompanyConfigurationScreen } from '../company/CompanyConfigurationScreen';
+import { useAppDispatch } from '../../store';
+import { completeOnboarding, setGuestMode } from '../../store/slices/authSlice';
 
 const { width, height } = Dimensions.get('window');
 
@@ -102,7 +104,7 @@ const onboardingData: OnboardingItem[] = [
 ];
 
 interface OnboardingScreenProps {
-  onComplete: () => void;
+  onComplete?: () => void;
 }
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
@@ -110,6 +112,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
   const scrollX = useRef(new Animated.Value(0)).current;
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [configStep, setConfigStep] = useState<1 | 2 | 3 | 4>(1);
+  const dispatch = useAppDispatch();
 
   // Debug logging and safety checks
   useEffect(() => {
@@ -117,6 +120,40 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
     console.log('OnboardingScreen: onComplete value:', onComplete);
     console.log('OnboardingScreen: Is onComplete callable?', typeof onComplete === 'function');
   }, [onComplete]);
+
+  const handleOnboardingComplete = () => {
+    console.log('Onboarding completed. Dispatching completeOnboarding action...');
+    dispatch(completeOnboarding());
+    
+    if (onComplete) {
+      try {
+        console.log('Calling onComplete function...');
+        onComplete();
+        console.log('onComplete function called successfully');
+      } catch (error) {
+        console.error('Error calling onComplete:', error);
+      }
+    } else {
+      console.log('No onComplete prop provided, Redux state updated only');
+    }
+  };
+
+  const handleSkipOnboarding = () => {
+    console.log('Onboarding skipped. Setting guest mode and completing onboarding...');
+    dispatch(setGuestMode(true));
+    
+    if (onComplete) {
+      try {
+        console.log('Calling onComplete function...');
+        onComplete();
+        console.log('onComplete function called successfully');
+      } catch (error) {
+        console.error('Error calling onComplete:', error);
+      }
+    } else {
+      console.log('No onComplete prop provided, Redux state updated only');
+    }
+  };
 
   const goToNext = () => {
     if (currentIndex < onboardingData.length - 1) {
@@ -129,27 +166,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
         useNativeDriver: false,
       }).start();
     } else {
-      // Add safety check and better debugging
-      console.log('Onboarding completed. Calling onComplete...');
-      console.log('onComplete type:', typeof onComplete);
-      console.log('onComplete value:', onComplete);
-      
-      if (typeof onComplete === 'function') {
-        try {
-          console.log('Calling onComplete function...');
-          onComplete();
-          console.log('onComplete function called successfully');
-        } catch (error) {
-          console.error('Error calling onComplete:', error);
-          // Try to handle gracefully by setting the onboarding as complete locally
-          console.log('Attempting to handle onboarding completion locally...');
-        }
-      } else {
-        console.error('CRITICAL ERROR: onComplete is not a function:', onComplete);
-        console.error('Props received:', { onComplete });
-        // This should never happen with proper typing, but let's handle it
-        console.log('Attempting to complete onboarding without onComplete function...');
-      }
+      handleOnboardingComplete();
     }
   };
 
@@ -329,7 +346,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
         {currentIndex < onboardingData.length - 1 && (
           <TouchableOpacity
             style={[styles.button, styles.skipButton]}
-            onPress={onComplete}
+            onPress={handleSkipOnboarding}
           >
             <Text style={styles.skipButtonText}>Omitir</Text>
           </TouchableOpacity>

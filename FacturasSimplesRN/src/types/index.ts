@@ -140,6 +140,7 @@ export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isGuestMode: boolean;
+  hasCompletedOnboarding: boolean;
   loading: boolean;
   error: string | null;
   token: string | null;

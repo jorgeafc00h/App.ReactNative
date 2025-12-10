@@ -8,10 +8,10 @@ module.exports = {
   ],
   testEnvironment: 'jsdom',
   transform: {
-    '^.+\\.(ts|tsx)$': 'ts-jest',
-    '^.+\\.(js|jsx)$': 'babel-jest',
+    '^.+\\.(ts|tsx|js|jsx)$': 'babel-jest',
   },
-  moduleNameMapping: {
+  // using babel-jest to handle TS/TSX via `@babel/preset-typescript`
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@assets/(.*)$': '<rootDir>/src/assets/$1',
     '^@components/(.*)$': '<rootDir>/src/components/$1',
@@ -19,6 +19,11 @@ module.exports = {
     '^@store/(.*)$': '<rootDir>/src/store/$1',
     '^@types/(.*)$': '<rootDir>/src/types/$1',
     '^@utils/(.*)$': '<rootDir>/src/utils/$1',
+    '^react-native/jest/setup$': '<rootDir>/src/tests/react-native-jest-setup.js',
+    '^react-native/jest/setup.js$': '<rootDir>/src/tests/react-native-jest-setup.js',
+    '^react-native/jest/mock$': '<rootDir>/src/tests/react-native-jest-mock.js',
+    '^react-native/jest/mock.js$': '<rootDir>/src/tests/react-native-jest-mock.js',
+    '^react-native$': '<rootDir>/src/tests/react-native-shim.js',
   },
   transformIgnorePatterns: [
     'node_modules/(?!(react-native|@react-native|expo|@expo|react-redux|@reduxjs/toolkit)/)'

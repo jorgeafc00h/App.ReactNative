@@ -118,7 +118,7 @@ export const selectInvoiceStats = createSelector([selectFilteredInvoices], (invo
       const date = new Date(inv.date);
       return date.getMonth() === month && date.getFullYear() === year;
     })
-    .reduce((sum, inv) => sum + (inv.totals?.totalAmount ?? 0), 0);
+    .reduce((sum, inv) => sum + (inv.totalAmountIncludingTax != null ? inv.totalAmountIncludingTax : (inv.totals?.totalAmount || 0)), 0);
 
   return {
     total,
@@ -159,12 +159,12 @@ export const selectCompanyRevenueStats = createSelector(
   [selectCurrentCompanyInvoices],
   (invoices) => {
     const completedInvoices = invoices.filter(inv => inv.status === InvoiceStatus.Completada);
-    const totalRevenue = completedInvoices.reduce((sum, inv) => sum + (inv.totals?.totalAmount || 0), 0);
+    const totalRevenue = completedInvoices.reduce((sum, inv) => sum + (inv.totalAmountIncludingTax != null ? inv.totalAmountIncludingTax : (inv.totals?.totalAmount || 0)), 0);
     const monthlyRevenue = new Map<string, number>();
     
     completedInvoices.forEach(inv => {
       const month = inv.date.substring(0, 7); // YYYY-MM
-      monthlyRevenue.set(month, (monthlyRevenue.get(month) || 0) + (inv.totals?.totalAmount || 0));
+      monthlyRevenue.set(month, (monthlyRevenue.get(month) || 0) + (inv.totalAmountIncludingTax != null ? inv.totalAmountIncludingTax : (inv.totals?.totalAmount || 0)));
     });
 
     return {

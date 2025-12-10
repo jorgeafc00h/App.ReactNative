@@ -24,4 +24,6 @@ I want to target this app to android and windows. so at the end of the implement
 
 another important direction is whenever I ask you a new feature you should first of all go and review the swift code becasue is already implemented on the ios APP, 
 
+
 then you can check screenshots under folder ScreenShots_SwiftApp
+

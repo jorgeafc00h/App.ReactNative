@@ -145,7 +145,7 @@ export class CertificateService {
       console.log('🔐 CertificateService: Updating certificate password');
 
       // Validate password match (matches Swift validation)
-      if (password !== confirmPassword || password.isEmpty || confirmPassword.isEmpty) {
+      if (password !== confirmPassword || password.length === 0 || confirmPassword.length === 0) {
         return {
           isValid: false,
           message: 'Passwords no coinciden', // Matches Swift message

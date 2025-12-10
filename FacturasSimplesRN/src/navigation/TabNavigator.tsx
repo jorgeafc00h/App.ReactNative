@@ -2,9 +2,9 @@ import React from 'react';
 import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { HomeScreen } from '../screens/home/HomeScreen';
-import { InvoicesScreen } from '../screens/invoices/InvoicesScreen';
+import InvoicesStack from './InvoicesStack';
 import { ProductsScreen } from '../screens/products/ProductsScreen';
-import { CustomersScreen } from '../screens/customers/CustomersScreen';
+import CustomersStack from './CustomersStack';
 import { useTheme } from '../hooks/useTheme';
 
 const Tab = createBottomTabNavigator();
@@ -61,7 +61,7 @@ export const TabNavigator: React.FC = () => {
       />
       <Tab.Screen 
         name="Invoices" 
-        component={InvoicesScreen}
+        component={InvoicesStack}
         options={{ 
           tabBarLabel: 'Facturas',
         }}
@@ -75,7 +75,7 @@ export const TabNavigator: React.FC = () => {
       />
       <Tab.Screen 
         name="Customers" 
-        component={CustomersScreen}
+        component={CustomersStack}
         options={{ 
           tabBarLabel: 'Clientes',
         }}

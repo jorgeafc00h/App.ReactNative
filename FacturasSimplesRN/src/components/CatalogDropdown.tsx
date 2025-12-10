@@ -84,11 +84,11 @@ export const CatalogDropdown: React.FC<CatalogDropdownProps> = ({
   if (!catalog) {
     return (
       <View style={styles.container}>
-        <Text style={styles.label}>
+        <Text style={styles.label} testID={`catalog-label-${catalogId}`}>
           {label} {required && '*'}
         </Text>
         <View style={[styles.dropdown, styles.dropdownDisabled]}>
-          <Text style={styles.disabledText}>Cargando catálogo...</Text>
+          <Text style={styles.disabledText} testID={`catalog-loading-${catalogId}`}>Cargando catálogo...</Text>
         </View>
       </View>
     );
@@ -96,15 +96,16 @@ export const CatalogDropdown: React.FC<CatalogDropdownProps> = ({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>
+      <Text style={styles.label} testID={`catalog-label-${catalogId}`}>
         {label} {required && '*'}
       </Text>
-      
+
       <TouchableOpacity
         style={styles.dropdown}
         onPress={() => setIsVisible(true)}
+        testID={`catalog-toggle-${catalogId}`}
       >
-        <Text style={[styles.dropdownText, !selectedOption && styles.placeholderText]}>
+        <Text style={[styles.dropdownText, !selectedOption && styles.placeholderText]} testID={`catalog-value-${catalogId}`}>
           {selectedOption ? selectedOption.description : placeholder}
         </Text>
         <Text style={styles.arrow}>▼</Text>
@@ -117,11 +118,11 @@ export const CatalogDropdown: React.FC<CatalogDropdownProps> = ({
       >
         <View style={styles.modal}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setIsVisible(false)}>
+            <TouchableOpacity onPress={() => setIsVisible(false)} testID={`catalog-cancel-${catalogId}`}>
               <Text style={styles.cancelButton}>Cancelar</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>{label}</Text>
-            <TouchableOpacity onPress={handleClear}>
+            <Text style={styles.modalTitle} testID={`catalog-modal-title-${catalogId}`}>{label}</Text>
+            <TouchableOpacity onPress={handleClear} testID={`catalog-clear-${catalogId}`}>
               <Text style={styles.clearButton}>Limpiar</Text>
             </TouchableOpacity>
           </View>
@@ -136,7 +137,7 @@ export const CatalogDropdown: React.FC<CatalogDropdownProps> = ({
             />
           </View>
 
-          <FlatList
+            <FlatList
             data={filteredOptions}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
@@ -146,6 +147,7 @@ export const CatalogDropdown: React.FC<CatalogDropdownProps> = ({
                   item.code === value && styles.selectedOption,
                 ]}
                 onPress={() => handleSelect(item)}
+                testID={`catalog-option-${catalogId}-${item.id}`}
               >
                 <Text style={[
                   styles.optionText,

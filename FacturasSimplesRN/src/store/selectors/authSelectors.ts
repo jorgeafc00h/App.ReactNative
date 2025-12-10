@@ -84,3 +84,15 @@ export const selectIsSessionExpired = createSelector(
     return new Date() >= expiresAt;
   }
 );
+
+export const selectHasCompletedOnboarding = createSelector(
+  [selectAuth],
+  (auth) => auth.hasCompletedOnboarding
+);
+
+export const selectShouldShowMainApp = createSelector(
+  [selectAuth],
+  (auth) => {
+    return auth.isAuthenticated || (auth.isGuestMode && auth.hasCompletedOnboarding);
+  }
+);

@@ -13,6 +13,7 @@ The React Native app has a **strong foundation** (60% complete) with excellent a
 
 ### 🎯 Goal: Enable legal invoice submission to Salvadoran government
 
+
 ### Week 1: DTE API Integration
 **Priority**: 🔴 Critical
 **Lead**: Senior Developer

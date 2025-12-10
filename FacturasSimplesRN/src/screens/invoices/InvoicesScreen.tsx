@@ -6,11 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../../hooks/useTheme';
 
 export const InvoicesScreen: React.FC = () => {
   const { theme } = useTheme();
+  const navigation = useNavigation();
 
   const invoices = [
     {
@@ -72,7 +74,7 @@ export const InvoicesScreen: React.FC = () => {
         <Text style={[styles.title, { color: theme.colors.text.primary }]}>
           Facturas
         </Text>
-        <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.colors.primary }]}>
+        <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.colors.primary }]} onPress={() => navigation.navigate('AddInvoice' as any)}>
           <Text style={styles.addButtonText}>+ Nueva</Text>
         </TouchableOpacity>
       </View>
@@ -114,6 +116,7 @@ export const InvoicesScreen: React.FC = () => {
             key={index}
             style={[styles.invoiceCard, { backgroundColor: theme.colors.surface.primary }]}
             activeOpacity={0.7}
+            onPress={() => navigation.navigate('InvoiceDetail' as any, { invoiceId: invoice.id })}
           >
             <View style={styles.invoiceHeader}>
               <View style={styles.invoiceInfo}>

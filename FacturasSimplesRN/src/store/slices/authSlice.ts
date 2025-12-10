@@ -8,6 +8,7 @@ const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
   isGuestMode: false,
+  hasCompletedOnboarding: false,
   loading: false,
   error: null,
   token: null,
@@ -243,7 +244,18 @@ const authSlice = createSlice({
         state.user = null;
         state.token = null;
         state.refreshToken = null;
+        state.hasCompletedOnboarding = true; // Mark as completed when entering guest mode
       }
+    },
+
+    // Complete onboarding
+    completeOnboarding: (state) => {
+      state.hasCompletedOnboarding = true;
+    },
+
+    // Reset onboarding (for testing)
+    resetOnboarding: (state) => {
+      state.hasCompletedOnboarding = false;
     },
   },
   extraReducers: (builder) => {
@@ -342,6 +354,8 @@ export const {
   restoreSession,
   setAuthenticatedUser,
   setGuestMode,
+  completeOnboarding,
+  resetOnboarding,
 } = authSlice.actions;
 
 export default authSlice.reducer;

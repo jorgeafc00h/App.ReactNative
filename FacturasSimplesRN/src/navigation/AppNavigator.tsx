@@ -5,17 +5,17 @@ import { TabNavigator } from './TabNavigator';
 import { WelcomeContainer } from '../screens/auth/WelcomeContainer';
 import { OnboardingScreen } from '../screens/auth/OnboardingScreen';
 import { useAppSelector } from '../store';
-import { selectIsAuthenticated } from '../store/selectors/authSelectors';
+import { selectShouldShowMainApp } from '../store/selectors/authSelectors';
 
 const Stack = createStackNavigator();
 
 export const AppNavigator: React.FC = () => {
-  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const shouldShowMainApp = useAppSelector(selectShouldShowMainApp);
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
+        {shouldShowMainApp ? (
           <Stack.Screen name="MainTabs" component={TabNavigator} />
         ) : (
           <>

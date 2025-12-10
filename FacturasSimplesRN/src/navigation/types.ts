@@ -8,4 +8,6 @@ export type InvoicesStackParamList = {
   InvoicesList: undefined;
   InvoiceDetail: { invoiceId: string };
   InvoiceForm: { mode: 'create' | 'edit'; invoiceId?: string };
+  AddInvoice: undefined;
+  EditInvoice: { invoiceId: string };
 };

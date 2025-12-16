@@ -49,6 +49,7 @@ export interface Invoice {
   createdAt: string;
   updatedAt: string;
   totals?: InvoiceCalculations;
+  totalAmountIncludingTax: number; // Added missing property
 }
 
 export interface InvoiceDetail {

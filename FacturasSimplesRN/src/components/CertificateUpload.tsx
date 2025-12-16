@@ -35,10 +35,10 @@ export const CertificateUpload: React.FC<CertificateUploadProps> = ({
 }) => {
   // Redux state
   const selectedCompany = useSelector((state: RootState) => 
-    company || state.company.selectedCompany
+    company || state.companies.currentCompany
   );
   const isProduction = useSelector((state: RootState) => 
-    state.app.environment === 'PRODUCTION'
+    state.app.environment === 'production'
   );
 
   // Local state

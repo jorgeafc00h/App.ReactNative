@@ -32,7 +32,7 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
   onCustomerCreated,
 }) => {
   const dispatch = useDispatch();
-  const { loading } = useSelector((state: RootState) => state.customer);
+  const { loading } = useSelector((state: RootState) => state.customers);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -45,7 +45,7 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
     nrc: '',
     hasRetention: false,
     taxRegistrationNumber: '',
-    customerType: 'Individual' as CustomerType,
+    customerType: CustomerType.Individual,
     descActividad: '',
     codActividad: '',
   });
@@ -105,16 +105,20 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
         id: generateId(),
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
-        email: formData.email.trim() || undefined,
-        phone: formData.phone.trim() || undefined,
-        address: formData.address.trim() || undefined,
-        nationalId: formData.nationalId.trim() || undefined,
-        nrc: formData.nrc.trim() || undefined,
-        hasRetention: formData.hasRetention,
-        taxRegistrationNumber: formData.taxRegistrationNumber.trim() || undefined,
+        email: formData.email.trim() || '',
+        phone: formData.phone.trim() || '',
+        address: formData.address.trim() || '',
+        nationalId: formData.nationalId.trim() || '',
+        nit: formData.nationalId.trim() || '', // Added missing nit property
+        documentType: 'DUI' as any, // Default document type
+        hasContributorRetention: formData.hasRetention,
         customerType: formData.customerType,
-        descActividad: formData.descActividad.trim() || undefined,
-        codActividad: formData.codActividad.trim() || undefined,
+        isActive: true,
+        companyId: '', // Will be set by the parent component
+        nrc: formData.nrc.trim() || '',
+        taxRegistrationNumber: formData.taxRegistrationNumber.trim() || '',
+        descActividad: formData.descActividad.trim() || '',
+        codActividad: formData.codActividad.trim() || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -149,7 +153,7 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
       nrc: '',
       hasRetention: false,
       taxRegistrationNumber: '',
-      customerType: 'Individual',
+      customerType: CustomerType.Individual,
       descActividad: '',
       codActividad: '',
     });

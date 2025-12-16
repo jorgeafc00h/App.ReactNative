@@ -12,12 +12,12 @@ import {
   ActivityIndicator,
   Modal,
   KeyboardAvoidingView,
+  Animated,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import Animated, { FadeInRight, FadeOutLeft } from 'react-native-reanimated';
 
 import { useTheme } from '../../hooks/useTheme';
 import { useAppDispatch, useAppSelector } from '../../store';
@@ -125,6 +125,7 @@ export const AddInvoiceScreen: React.FC = () => {
 
   // Refs
   const scrollViewRef = useRef<ScrollView>(null);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   // Multi-step form state
   const [currentStep, setCurrentStep] = useState<FormStep>(FormStep.BASIC_INFO);
@@ -214,9 +215,23 @@ export const AddInvoiceScreen: React.FC = () => {
 
   // Step navigation functions
   const goToStep = useCallback((step: FormStep) => {
+    // Animate step transition
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     setCurrentStep(step);
     scrollViewRef.current?.scrollTo({ x: 0, y: 0, animated: true });
-  }, []);
+  }, [fadeAnim]);
 
   const goToNextStep = useCallback(() => {
     if (!isLastStep) {
@@ -889,10 +904,12 @@ export const AddInvoiceScreen: React.FC = () => {
         keyboardShouldPersistTaps="handled"
       >
         <Animated.View
-          key={currentStep}
-          entering={FadeInRight.duration(300)}
-          exiting={FadeOutLeft.duration(200)}
-          style={styles.stepContent}
+          style={[
+            styles.stepContent,
+            {
+              opacity: fadeAnim,
+            }
+          ]}
         >
           {renderStepContent()}
         </Animated.View>

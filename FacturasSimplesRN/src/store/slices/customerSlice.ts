@@ -8,7 +8,7 @@ import {
   UpdateCustomerInput,
   CustomerFilters,
 } from '../../types';
-import { DEFAULT_COMPANY_ID, seedCustomers } from '../../data/fixtures';
+import { DEFAULT_COMPANY_ID } from '../../data/fixtures';
 
 const now = () => new Date().toISOString();
 
@@ -20,6 +20,7 @@ const buildCustomer = (input: CreateCustomerInput): Customer => {
     lastName: input.lastName.trim(),
     businessName: input.businessName?.trim() || `${input.firstName} ${input.lastName}`,
     nationalId: input.nationalId.trim(),
+    nit: input.nit.trim(), // Added missing nit property
     documentType: input.documentType,
     email: input.email.trim().toLowerCase(),
     phone: input.phone.trim(),
@@ -47,9 +48,9 @@ const buildCustomer = (input: CreateCustomerInput): Customer => {
 };
 
 const initialState: CustomerState = {
-  customers: seedCustomers,
-  currentCustomer: seedCustomers.length ? seedCustomers[0] : null,
-  selectedCustomerId: seedCustomers.length ? seedCustomers[0].id : null,
+  customers: [], // Start with empty customers array
+  currentCustomer: null,
+  selectedCustomerId: null,
   loading: false,
   error: null,
   searchTerm: '',

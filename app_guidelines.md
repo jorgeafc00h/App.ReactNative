@@ -1,5 +1,5 @@
 
-the source code for this app is located  at `/Users/jorgeflores/Apps/FacturasSimplesApp`
+the source code for this app is located  at `/FacturasSimplesApp`
 is a swift app that has most of the features required and the most 
 
 initial steps

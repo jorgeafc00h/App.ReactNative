@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { createCompany, updateCompany, fetchCompanies, setSelectedCompany } from '../../store/slices/companySlice';
+import { createCompany, updateCompany, fetchCompanies, setSelectedCompany, resetCompanies } from '../../store/slices/companySlice';
 import { CreateCompanyInput, CompanyEnvironment } from '../../types/company';
 import { CertificateUpload } from '../../components/CertificateUpload';
 import { CatalogDropdown } from '../../components/CatalogDropdown';
@@ -36,91 +36,83 @@ export const CompanyConfigurationScreen: React.FC<CompanyConfigurationScreenProp
     environment: CompanyEnvironment.Development,
   });
   
-  // Fetch companies on mount to get the first saved company
+  // Clear any existing company data on mount for clean onboarding
   useEffect(() => {
-    console.log('CompanyConfigurationScreen: Fetching companies on mount');
-    dispatch(fetchCompanies());
+    console.log('CompanyConfigurationScreen: Clearing existing company data for clean onboarding');
+    // Reset companies state to ensure no cached data
+    dispatch(resetCompanies());
+    
+    // Also clear persisted data to ensure clean slate
+    const clearPersistedData = async () => {
+      try {
+        const AsyncStorage = await import('@react-native-async-storage/async-storage');
+        await AsyncStorage.default.removeItem('persist:companies');
+        await AsyncStorage.default.removeItem('persist:customers');
+        await AsyncStorage.default.removeItem('persist:invoices');
+        console.log('CompanyConfigurationScreen: Cleared persisted data');
+      } catch (error) {
+        console.warn('CompanyConfigurationScreen: Failed to clear persisted data:', error);
+      }
+    };
+    clearPersistedData();
   }, [dispatch]);
   
-  // Load existing company data when companies are loaded
-  useEffect(() => {
-    if (companies.length > 0 && !currentCompany) {
-      // Load the first company (like Swift UI app behavior)
-      console.log('CompanyConfigurationScreen: Setting first company as current', companies[0]);
-      dispatch(setSelectedCompany(companies[0].id));
-    }
-  }, [companies, currentCompany, dispatch]);
+  // Skip auto-loading existing company data for clean onboarding
+  // useEffect(() => {
+  //   if (companies.length > 0 && !currentCompany) {
+  //     // Load the first company (like Swift UI app behavior)
+  //     console.log('CompanyConfigurationScreen: Setting first company as current', companies[0]);
+  //     dispatch(setSelectedCompany(companies[0].id));
+  //   }
+  // }, [companies, currentCompany, dispatch]);
   
-  // Initialize form fields when currentCompany is available
+  // Track if we've initialized forms to prevent loops
+  const [formsInitialized, setFormsInitialized] = useState(false);
+
+  // Initialize form fields - restore user's entered data when navigating between steps
   useEffect(() => {
-    if (currentCompany) {
-      console.log('CompanyConfigurationScreen: Loading company data into forms', currentCompany);
-      // Load existing company data into form fields
+    console.log('CompanyConfigurationScreen: Loading form data for step', step, 'companyData:', Object.keys(companyData).length);
+    
+    // Load data from accumulated companyData (user's entered data) when changing steps
+    if (!formsInitialized || step) {
+      // Restore user's previously entered data from companyData
       setFiscalData({
-        nit: currentCompany.nit || '',
-        nombre: currentCompany.nombre || '',
-        nombreComercial: currentCompany.nombreComercial || '',
-        nrc: currentCompany.nrc || '',
+        nit: companyData.nit || '',
+        nombre: companyData.nombre || '',
+        nombreComercial: companyData.nombreComercial || '',
+        nrc: companyData.nrc || '',
       });
       
       setGeneralData({
-        correo: currentCompany.correo || '',
-        telefono: currentCompany.telefono || '',
-        complemento: currentCompany.complemento || '',
-        departamentoCode: currentCompany.departamentoCode || '',
-        departamento: currentCompany.departamento || '',
-        municipioCode: currentCompany.municipioCode || '',
-        municipio: currentCompany.municipio || '',
+        correo: companyData.correo || '',
+        telefono: companyData.telefono || '',
+        complemento: companyData.complemento || '',
+        departamentoCode: companyData.departamentoCode || '',
+        departamento: companyData.departamento || '',
+        municipioCode: companyData.municipioCode || '',
+        municipio: companyData.municipio || '',
       });
       
       setIssuerData({
-        codActividad: currentCompany.codActividad || '',
-        descActividad: currentCompany.descActividad || '',
-        tipoEstablecimiento: currentCompany.tipoEstablecimiento || '',
-        establecimiento: currentCompany.establecimiento || '',
-        codEstableMH: currentCompany.codEstableMH || 'M001',
-        codEstable: currentCompany.codEstable || '',
-        codPuntoVentaMH: currentCompany.codPuntoVentaMH || 'P001',
-        codPuntoVenta: currentCompany.codPuntoVenta || '',
+        codActividad: companyData.codActividad || '',
+        descActividad: companyData.descActividad || '',
+        tipoEstablecimiento: companyData.tipoEstablecimiento || '',
+        establecimiento: companyData.establecimiento || '',
+        codEstableMH: companyData.codEstableMH || 'M001',
+        codEstable: companyData.codEstable || '',
+        codPuntoVentaMH: companyData.codPuntoVentaMH || 'P001',
+        codPuntoVenta: companyData.codPuntoVenta || '',
       });
       
       setCertificateData({
-        certificatePath: currentCompany.certificatePath || '',
-        password: '',
+        certificatePath: companyData.certificatePath || '',
+        password: companyData.certificatePassword || '',
         confirmPassword: '',
       });
       
-      // Also update the accumulated company data
-      setCompanyData({
-        environment: CompanyEnvironment.Development,
-        // Basic info
-        nit: currentCompany.nit || '',
-        nombre: currentCompany.nombre || '',
-        nombreComercial: currentCompany.nombreComercial || '',
-        nrc: currentCompany.nrc || '',
-        // Contact & location
-        correo: currentCompany.correo || '',
-        telefono: currentCompany.telefono || '',
-        complemento: currentCompany.complemento || '',
-        departamentoCode: currentCompany.departamentoCode || '',
-        departamento: currentCompany.departamento || '',
-        municipioCode: currentCompany.municipioCode || '',
-        municipio: currentCompany.municipio || '',
-        // Economic activity & establishment
-        codActividad: currentCompany.codActividad || '',
-        descActividad: currentCompany.descActividad || '',
-        tipoEstablecimiento: currentCompany.tipoEstablecimiento || '',
-        establecimiento: currentCompany.establecimiento || '',
-        codEstableMH: currentCompany.codEstableMH || 'M001',
-        codEstable: currentCompany.codEstable || '',
-        codPuntoVentaMH: currentCompany.codPuntoVentaMH || 'P001',
-        codPuntoVenta: currentCompany.codPuntoVenta || '',
-        // Certificate
-        certificatePath: currentCompany.certificatePath || '',
-        certificatePassword: '',
-      });
+      setFormsInitialized(true);
     }
-  }, [currentCompany]);
+  }, [step, companyData, formsInitialized]);
   
   // Step 1: Basic Company Info (matches AddCompanyView)
   const [fiscalData, setFiscalData] = useState({
@@ -207,6 +199,12 @@ export const CompanyConfigurationScreen: React.FC<CompanyConfigurationScreenProp
 
       // Accumulate data across steps
       const updatedCompanyData = { ...companyData, ...stepData };
+      console.log('CompanyConfigurationScreen: Saving step data', {
+        step,
+        stepData,
+        previousCompanyData: companyData,
+        updatedCompanyData
+      });
       setCompanyData(updatedCompanyData);
 
       // If this is the last step, create or update the company

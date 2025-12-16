@@ -9,10 +9,28 @@ const Stack = createStackNavigator<CustomersStackParamList>();
 
 export const CustomersStack: React.FC = () => {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="CustomersList" component={CustomersScreen} />
-      <Stack.Screen name="CustomerDetail" component={CustomerDetail} />
-      <Stack.Screen name="CustomerForm" component={CustomerForm} />
+    <Stack.Navigator>
+      <Stack.Screen 
+        name="CustomersList" 
+        component={CustomersScreen}
+        options={{ title: 'Clientes' }}
+      />
+      <Stack.Screen 
+        name="CustomerDetail" 
+        component={CustomerDetail}
+        options={{ 
+          title: 'Cliente',
+          headerBackTitle: 'Clientes'
+        }}
+      />
+      <Stack.Screen 
+        name="CustomerForm" 
+        component={CustomerForm}
+        options={{ 
+          title: 'Cliente',
+          headerBackTitle: 'Atrás'
+        }}
+      />
     </Stack.Navigator>
   );
 };

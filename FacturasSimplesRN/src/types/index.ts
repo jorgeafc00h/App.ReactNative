@@ -10,6 +10,7 @@ export * from './dte';
 export * from './email';
 export * from './promo';
 export * from './purchase';
+export * from './chat';
 
 // API and service types
 export interface ApiResponse<T = any> {
@@ -61,14 +62,17 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   ForgotPassword: undefined;
+  Onboarding: undefined;
+  Welcome: undefined;
   
-  // Main app screens
+  // Main app screens (Tab Navigator)
+  MainTabs: undefined;
   Home: undefined;
   
   // Invoice screens
   InvoiceList: undefined;
   InvoiceDetail: { invoiceId: string };
-  CreateInvoice: undefined;
+  CreateInvoice: { duplicateFrom?: string };
   EditInvoice: { invoiceId: string };
   
   // Customer screens
@@ -88,21 +92,29 @@ export type RootStackParamList = {
   CompanyDetail: { companyId: string };
   CreateCompany: undefined;
   EditCompany: { companyId: string };
+  Companies: undefined;
+  CompanyDetails: { companyId: string };
   
   // Settings screens
   Settings: undefined;
   Profile: undefined;
   Certificates: undefined;
   Sync: undefined;
+  CompanyConfiguration: undefined;
+  Purchases: undefined;
+  AccountSummary: undefined;
+  ChatAssistant: { selectedCompanyId?: string };
+  BuyCredits: undefined;
+  PurchaseHistory: undefined;
+  GovernmentCatalogs: undefined;
 };
 
 export type TabParamList = {
-  HomeTab: undefined;
-  InvoicesTab: undefined;
-  CustomersTab: undefined;
-  ProductsTab: undefined;
-  CompaniesTab: undefined;
-  SettingsTab: undefined;
+  Home: undefined;
+  Invoices: undefined;
+  Customers: undefined;
+  Products: undefined;
+  Settings: undefined;
 };
 
 // Form types
@@ -165,6 +177,7 @@ export interface AppState {
   isOnline: boolean;
   currentTheme: 'light' | 'dark' | 'system';
   language: string;
+  environment: 'development' | 'production'; // Added missing environment property
   lastSyncDate?: string;
   syncStatus: 'idle' | 'syncing' | 'success' | 'error';
   notifications: AppNotification[];

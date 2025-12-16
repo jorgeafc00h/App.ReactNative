@@ -1,0 +1,17 @@
+Starting project at /Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+The following packages should be updated for best compatibility with the installed expo version:
+  @react-native-community/datetimepicker@8.5.1 - expected version: 8.4.4
+  expo@54.0.28 - expected version: ~54.0.29
+Your project may not work correctly until you install the expected versions of the packages.
+› Opening exp://192.168.1.4:8081 on Phone_API_35
+- Fetching Expo Go
+- Installing Expo Go on Phone_API_35
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Android ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.3% (1275/1320)
+Android Bundled 4032ms index.ts (1353 modules)
+Android ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 40ms index.ts (1 module)

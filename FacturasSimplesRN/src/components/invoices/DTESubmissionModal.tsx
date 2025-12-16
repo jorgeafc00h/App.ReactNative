@@ -15,7 +15,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { updateInvoice } from '../../store/slices/invoiceSlice';
-import { Invoice } from '../../types/invoice';
+import { Invoice, InvoiceType } from '../../types/invoice';
 import { Company } from '../../types/company';
 import { InvoiceService } from '../../services/api/InvoiceService';
 import { getCertificateService } from '../../services/security/CertificateService';
@@ -52,8 +52,8 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
   pdfData,
 }) => {
   const dispatch = useDispatch();
-  const selectedCompany = useSelector((state: RootState) => state.company.selectedCompany);
-  const isProduction = useSelector((state: RootState) => state.app.environment === 'PRODUCTION');
+  const selectedCompany = useSelector((state: RootState) => state.companies.currentCompany);
+  const isProduction = useSelector((state: RootState) => state.app.environment === 'production');
 
   const [invoiceService] = useState(() => new InvoiceService(isProduction));
   const [certificateService] = useState(() => getCertificateService(isProduction));
@@ -160,12 +160,10 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
       // Update invoice with DTE response data
       const updatedInvoice: Invoice = {
         ...invoice,
-        generationCode: response.codigoGeneracion,
-        controlNumber: response.codigoGeneracion, // Using generation code as control number
-        receptionSeal: response.selloRecibido,
-        status: 'SUBMITTED',
-        submittedAt: new Date().toISOString(),
-        dteResponse: response,
+        generationCode: response.codigoGeneracion || '',
+        controlNumber: response.codigoGeneracion || '', // Using generation code as control number
+        receptionSeal: response.selloRecibido || '',
+        status: 2, // InvoiceStatus.Completada
       };
 
       dispatch(updateInvoice(updatedInvoice));
@@ -269,7 +267,7 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
     };
 
     // Add tax information if CCF
-    if (invoice.invoiceType === 'CCF' && invoice.totals?.tax) {
+    if (invoice.invoiceType === InvoiceType.CCF && invoice.totals?.tax) {
       dte.resumen.tributos = [{
         codigo: '20',
         descripcion: 'Impuesto al Valor Agregado 13%',
@@ -280,10 +278,10 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
     return dte;
   };
 
-  const getDTEType = (invoiceType: string): string => {
+  const getDTEType = (invoiceType: InvoiceType): string => {
     switch (invoiceType) {
-      case 'CCF': return '08'; // Comprobante de Crédito Fiscal
-      case 'SujetoExcluido': return '14'; // Sujeto Excluido
+      case InvoiceType.CCF: return '08'; // Comprobante de Crédito Fiscal
+      case InvoiceType.SujetoExcluido: return '14'; // Sujeto Excluido
       default: return '11'; // Factura
     }
   };

@@ -29,6 +29,7 @@ export const API_HEADERS = {
   CONTENT_TYPE: 'Content-Type'
 };
 
+
 // Environment helper
 export const getApiConfig = (isProduction: boolean) => {
   return isProduction ? API_CONFIG.production : API_CONFIG.development;

@@ -2,8 +2,8 @@
 // Based on SwiftUI CertificateUpdateViewModel implementation
 
 import { Platform } from 'react-native';
-import DocumentPicker, { DocumentPickerResponse } from 'react-native-document-picker';
-import RNFS from 'react-native-fs';
+// import DocumentPicker, { DocumentPickerResponse } from 'react-native-document-picker';
+// import RNFS from 'react-native-fs';
 import CryptoJS from 'crypto-js';
 import { InvoiceService } from '../api/InvoiceService';
 import { SecureStorageService } from './SecureStorageService';
@@ -31,6 +31,10 @@ export interface CertificateFile {
 export class CertificateService {
   private invoiceService: InvoiceService;
   
+  public getEnvironmentCode(): string {
+    return this.invoiceService.getEnvironmentCode();
+  }
+  
   constructor(isProduction: boolean = false) {
     this.invoiceService = new InvoiceService(isProduction);
   }
@@ -57,43 +61,12 @@ export class CertificateService {
    */
   async selectCertificateFile(): Promise<CertificateFile | null> {
     try {
-      console.log('📁 CertificateService: Opening file picker');
-
-      const result = await DocumentPicker.pick({
-        type: [
-          DocumentPicker.types.allFiles,
-          // Add specific certificate file types
-          'application/x-pkcs12',
-          'application/pkcs12',
-          '.p12',
-          '.pfx',
-        ],
-        allowMultiSelection: false,
-      });
-
-      if (result && result.length > 0) {
-        const file = result[0];
-        console.log('📄 Selected file:', file.name);
-
-        // Read file content as Base64
-        const fileData = await RNFS.readFile(file.uri, 'base64');
-
-        return {
-          uri: file.uri,
-          name: file.name,
-          size: file.size || 0,
-          type: file.type || 'application/octet-stream',
-          data: fileData,
-        };
-      }
-
+      console.log('📁 CertificateService: File picker not yet implemented');
+      
+      // TODO: Implement document picker when compatible version is available
+      // For now, return null to allow app to start
       return null;
     } catch (error) {
-      if (DocumentPicker.isCancel(error)) {
-        console.log('📁 User cancelled file picker');
-        return null;
-      }
-      
       console.error('❌ Error selecting certificate file:', error);
       throw new Error(`Failed to select certificate file: ${error}`);
     }
@@ -306,7 +279,7 @@ let certificateServiceInstance: CertificateService | null = null;
 
 export const getCertificateService = (isProduction?: boolean): CertificateService => {
   if (!certificateServiceInstance || 
-      (isProduction !== undefined && certificateServiceInstance.invoiceService.getEnvironmentCode() !== (isProduction ? 'PROD' : 'DEV'))) {
+      (isProduction !== undefined && certificateServiceInstance.getEnvironmentCode() !== (isProduction ? 'PROD' : 'DEV'))) {
     certificateServiceInstance = new CertificateService(isProduction);
   }
   return certificateServiceInstance;

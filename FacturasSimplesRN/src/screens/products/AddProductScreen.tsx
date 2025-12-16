@@ -29,7 +29,7 @@ export const AddProductScreen: React.FC = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   
-  const { loading } = useSelector((state: RootState) => state.product);
+  const { loading } = useSelector((state: RootState) => state.products);
 
   // Form state
   const [formData, setFormData] = useState({

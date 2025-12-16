@@ -12,7 +12,7 @@ import {
   UpdateInvoiceInput,
   InvoiceCalculations,
 } from '../../types';
-import { DEFAULT_COMPANY_ID, seedInvoices } from '../../data/fixtures';
+import { DEFAULT_COMPANY_ID } from '../../data/fixtures';
 
 const TAX_FACTOR = 1.13;
 
@@ -110,24 +110,16 @@ const buildInvoice = (input: CreateInvoiceInput): Invoice => {
     companyId: input.companyId,
     items,
     totals,
+    totalAmountIncludingTax: totals.totalPagar, // Added missing property
     createdAt,
     updatedAt: createdAt,
   };
 };
 
-const seededInvoices = seedInvoices.map(invoice => {
-  const items = normalizeInvoiceDetails(invoice.id, invoice.items);
-  return {
-    ...invoice,
-    items,
-    totals: computeTotals(items, invoice.invoiceType),
-  };
-});
-
 const initialState: InvoiceState = {
-  invoices: seededInvoices,
-  currentInvoice: seededInvoices.length ? seededInvoices[0] : null,
-  selectedInvoiceId: seededInvoices.length ? seededInvoices[0].id : null,
+  invoices: [], // Start with empty invoices array
+  currentInvoice: null,
+  selectedInvoiceId: null,
   loading: false,
   error: null,
   searchTerm: '',

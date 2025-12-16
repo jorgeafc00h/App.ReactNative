@@ -1,0 +1,56 @@
+The following packages should be updated for best compatibility with the installed expo version:
+  @react-native-community/datetimepicker@8.5.1 - expected version: 8.4.4
+  expo@54.0.27 - expected version: ~54.0.28
+Your project may not work correctly until you install the expected versions of the packages.
+› Installing 2 SDK 54.0.0 compatible native modules using npm
+The Expo CLI appears to be running this project in another terminal window. Close and restart any Expo CLI instances after the installation to complete the update.
+> npm install
+npm error code ERESOLVE
+npm error ERESOLVE could not resolve
+npm error
+npm error While resolving: react-native-print@0.7.0
+npm error Found: react-native@0.81.5
+npm error node_modules/react-native
+npm error   react-native@"0.81.5" from the root project
+npm error   peerOptional react-native@"*" from @expo/devtools@0.1.8
+npm error   node_modules/@expo/devtools
+npm error     @expo/devtools@"0.1.8" from expo@54.0.28
+npm error     node_modules/expo
+npm error       expo@"~54.0.28" from the root project
+npm error       13 more (@react-native-community/datetimepicker, ...)
+npm error   29 more (@expo/vector-icons, ...)
+npm error
+npm error Could not resolve dependency:
+npm error peer react-native-windows@">=0.62" from react-native-print@0.7.0
+npm error node_modules/react-native-print
+npm error   react-native-print@"^0.7.0" from the root project
+npm error
+npm error Conflicting peer dependency: react-native@0.80.2
+npm error node_modules/react-native
+npm error   peer react-native@"^0.80.0" from react-native-windows@0.80.1
+npm error   node_modules/react-native-windows
+npm error     peer react-native-windows@">=0.62" from react-native-print@0.7.0
+npm error     node_modules/react-native-print
+npm error       react-native-print@"^0.7.0" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error /Users/jorgeflores/.npm/_logs/2025-12-11T21_37_59_975Z-eresolve-report.txt
+npm error A complete log of this run can be found in: /Users/jorgeflores/.npm/_logs/2025-12-11T21_37_59_975Z-debug-0.log
+Cannot install the latest Expo package. Install expo@latest with npm and then run npx expo install again.
+Error: npm install exited with non-zero code: 1
+Error: npm install exited with non-zero code: 1
+    at ChildProcess.completionListener (/Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN/node_modules/@expo/spawn-async/build/spawnAsync.js:42:23)
+    at Object.onceWrapper (node:events:622:26)
+    at ChildProcess.emit (node:events:507:28)
+    at maybeClose (node:internal/child_process:1101:16)
+    at ChildProcess._handle.onexit (node:internal/child_process:305:5)
+    ...
+    at spawnAsync (/Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN/node_modules/@expo/spawn-async/build/spawnAsync.js:7:23)
+    at NpmPackageManager.runAsync (/Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN/node_modules/@expo/package-manager/build/node/BasePackageManager.js:41:42)
+    at /Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN/node_modules/@expo/package-manager/build/node/NpmPackageManager.js:36:20
+    at /Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN/node_modules/@expo/package-manager/build/utils/spawn.js:14:34

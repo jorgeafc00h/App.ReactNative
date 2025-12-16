@@ -20,6 +20,7 @@ export interface Customer {
   lastName: string;
   businessName?: string;
   nationalId: string;
+  nit: string; // Added missing nit property
   documentType: CustomerDocumentType;
   email: string;
   phone: string;
@@ -50,6 +51,7 @@ export interface CreateCustomerInput {
   lastName: string;
   businessName?: string;
   nationalId: string;
+  nit: string; // Added missing nit property
   documentType: CustomerDocumentType;
   email: string;
   phone: string;
@@ -84,6 +86,7 @@ export interface CustomerSummary {
   lastName: string;
   businessName?: string;
   nationalId: string;
+  nit: string; // Added missing nit property
   email: string;
   phone: string;
   customerType: CustomerType;

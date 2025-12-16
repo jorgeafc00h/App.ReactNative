@@ -32,8 +32,8 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   onConfirmSubmit,
   invoice,
 }) => {
-  const selectedCompany = useSelector((state: RootState) => state.company.selectedCompany);
-  const isProduction = useSelector((state: RootState) => state.app.environment === 'PRODUCTION');
+  const selectedCompany = useSelector((state: RootState) => state.companies.currentCompany);
+  const isProduction = useSelector((state: RootState) => state.app.environment === 'production');
 
   const [pdfGenerationService] = useState(() => getPDFGenerationService(isProduction));
   const [pdfResult, setPdfResult] = useState<PDFGenerationResult | null>(null);

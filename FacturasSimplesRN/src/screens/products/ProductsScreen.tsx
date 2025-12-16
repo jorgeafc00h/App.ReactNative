@@ -10,22 +10,22 @@ import {
   FlatList,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
-import { RootState } from '../../store';
-import { deleteProduct } from '../../store/slices/productSlice';
 import { useTheme } from '../../hooks/useTheme';
+import { useAppDispatch, useAppSelector } from '../../store';
+import { deleteProduct } from '../../store/slices/productSlice';
 import { Product } from '../../types/product';
 import { debounce } from '../../utils';
 
 export const ProductsScreen: React.FC = () => {
   const { theme } = useTheme();
   const navigation = useNavigation<any>();
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   
   // Redux state
-  const products = useSelector((state: RootState) => state.product.products);
-  const loading = useSelector((state: RootState) => state.product.loading);
+  const products = useAppSelector((state) => state.products.products);
+  const loading = useAppSelector((state) => state.products.loading);
+  const { currentCompany } = useAppSelector(state => state.companies);
   
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
@@ -232,7 +232,7 @@ export const ProductsScreen: React.FC = () => {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={[styles.title, { color: theme.colors.text.primary }]}>
-            Productos
+            {currentCompany ? `Productos: ${currentCompany.nombreComercial}` : 'Productos'}
           </Text>
           <Text style={[styles.subtitle, { color: theme.colors.text.secondary }]}>
             {filteredProducts.length} {filteredProducts.length === 1 ? 'producto' : 'productos'}

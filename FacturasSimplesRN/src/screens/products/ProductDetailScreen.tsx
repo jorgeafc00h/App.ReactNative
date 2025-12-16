@@ -27,7 +27,7 @@ export const ProductDetailScreen: React.FC = () => {
   
   const productId = route.params?.productId;
   const product = useSelector((state: RootState) => 
-    state.product.products.find(p => p.id === productId)
+    state.products.products.find(p => p.id === productId)
   );
 
   if (!product) {

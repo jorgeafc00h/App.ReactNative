@@ -24,6 +24,7 @@ export interface Company {
   correo: string; // Email - required
   telefono?: string; // Phone - optional
   complemento: string; // Address - required
+  direccion: string; // Address - alias for complemento
   departamentoCode: string; // Department code
   departamento: string; // Department name 
   municipioCode: string; // Municipality code
@@ -71,9 +72,9 @@ export interface Company {
   status: CompanyStatus;
   isDefault: boolean; // Default selected company
   userId: string; // Owner user ID
-  createdAt: Date;
-  updatedAt: Date;
-  lastSyncDate?: Date;
+  createdAt: string; // ISO string for Redux serialization
+  updatedAt: string; // ISO string for Redux serialization  
+  lastSyncDate?: string; // ISO string for Redux serialization
 }
 
 export interface CreateCompanyInput {

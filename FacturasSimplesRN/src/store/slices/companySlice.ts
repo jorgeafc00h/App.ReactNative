@@ -25,52 +25,8 @@ export const fetchCompanies = createAsyncThunk(
       // const companiesService = getCompaniesService();
       // const companies = await companiesService.getCompanies();
       
-      // Mock data for now - using new Swift-style structure
-      const companies: Company[] = [
-        {
-          id: '1',
-          // Basic Info
-          nit: '1234-567890-123-4',
-          nombre: 'Juan Carlos Pérez',
-          nombreComercial: 'Empresa Demo S.A. de C.V.',
-          nrc: '123456',
-          // Contact & Location 
-          correo: 'demo@empresa.com',
-          telefono: '2234-5678',
-          complemento: 'Calle Principal #123, Col. Centro',
-          departamentoCode: '06',
-          departamento: 'San Salvador',
-          municipioCode: '0606',
-          municipio: 'San Salvador',
-          // Economic Activity & Establishment
-          codActividad: '62020',
-          descActividad: 'Servicios de consultoría en informática',
-          tipoEstablecimiento: '01',
-          establecimiento: 'Local Comercial',
-          // MH codes with defaults
-          codEstableMH: 'M001',
-          codEstable: '',
-          codPuntoVentaMH: 'P001',
-          codPuntoVenta: '',
-          // Certificate
-          certificatePath: '',
-          certificatePassword: '',
-          // System fields
-          environment: CompanyEnvironment.Development,
-          hasValidCertificate: false,
-          logoUrl: undefined,
-          primaryColor: '#007AFF',
-          ivaPercentage: 13,
-          currentInvoiceNumber: 1,
-          currentCCFNumber: 1,
-          hasApiCredentials: false,
-          status: CompanyStatus.Active,
-          isDefault: true,
-          userId: 'user1',
-          createdAt: new Date('2024-01-01'),
-          updatedAt: new Date(),
-        } as Company
-      ];
+      // Return empty companies array - no sample data
+      const companies: Company[] = [];
       
       return companies;
     } catch (error: any) {
@@ -79,7 +35,7 @@ export const fetchCompanies = createAsyncThunk(
   }
 );
 
-export const fetchCompanyById = createAsyncThunk(
+export const fetchCompanyById = createAsyncThunk<Company | null, string>(
   'companies/fetchCompanyById',
   async (companyId: string, { rejectWithValue }) => {
     try {
@@ -87,52 +43,8 @@ export const fetchCompanyById = createAsyncThunk(
       // const companiesService = getCompaniesService();
       // const company = await companiesService.getCompanyById(companyId);
       
-      // Mock data for now - using new Swift-style structure
-      const company: Company = {
-        id: companyId,
-        // Basic Info
-        nit: '1234-567890-123-4',
-        nombre: 'Juan Carlos Pérez',
-        nombreComercial: 'Empresa Demo S.A. de C.V.',
-        nrc: '123456',
-        // Contact & Location 
-        correo: 'demo@empresa.com',
-        telefono: '2234-5678',
-        complemento: 'Calle Principal #123, Col. Centro',
-        departamentoCode: '06',
-        departamento: 'San Salvador',
-        municipioCode: '0606',
-        municipio: 'San Salvador',
-        // Economic Activity & Establishment
-        codActividad: '62020',
-        descActividad: 'Servicios de consultoría en informática',
-        tipoEstablecimiento: '01',
-        establecimiento: 'Local Comercial',
-        // MH codes with defaults
-        codEstableMH: 'M001',
-        codEstable: '',
-        codPuntoVentaMH: 'P001',
-        codPuntoVenta: '',
-        // Certificate
-        certificatePath: '',
-        certificatePassword: '',
-        // System fields
-        environment: CompanyEnvironment.Development,
-        hasValidCertificate: false,
-        logoUrl: undefined,
-        primaryColor: '#007AFF',
-        ivaPercentage: 13,
-        currentInvoiceNumber: 1,
-        currentCCFNumber: 1,
-        hasApiCredentials: false,
-        status: CompanyStatus.Active,
-        isDefault: true,
-        userId: 'user1',
-        createdAt: new Date('2024-01-01'),
-        updatedAt: new Date(),
-      } as Company;
-      
-      return company;
+      // Return null - no company found
+      return null;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to fetch company');
     }
@@ -151,6 +63,7 @@ export const createCompany = createAsyncThunk(
       const newCompany: Company = {
         id: `company_${Date.now()}`,
         ...companyData,
+        direccion: companyData.complemento || '', // direccion is alias for complemento
         hasValidCertificate: false,
         hasApiCredentials: false,
         currentInvoiceNumber: 1,
@@ -158,8 +71,8 @@ export const createCompany = createAsyncThunk(
         status: CompanyStatus.Active,
         isDefault: false,
         userId: 'user1', // TODO: Get from auth state
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       } as Company;
       
       return newCompany;
@@ -177,27 +90,28 @@ export const updateCompany = createAsyncThunk(
       // const companiesService = getCompaniesService();
       // const company = await companiesService.updateCompany(companyData);
       
-      // Mock update - using new Swift-style structure
+      // Mock update - create minimal company from provided data
       const updatedCompany: Company = {
         id: companyData.id,
         // Basic Info
-        nombre: companyData.nombre || 'Updated Name',
-        nombreComercial: companyData.nombreComercial || 'Updated Company',
-        nit: companyData.nit || '1234-567890-123-4',
-        nrc: companyData.nrc,
+        nombre: companyData.nombre || '',
+        nombreComercial: companyData.nombreComercial || '',
+        nit: companyData.nit || '',
+        nrc: companyData.nrc || '',
         // Contact & Location
-        correo: companyData.correo || 'updated@empresa.com',
-        telefono: companyData.telefono || '2234-5678',
-        complemento: companyData.complemento || 'Updated Address',
-        departamentoCode: companyData.departamentoCode || '06',
-        departamento: companyData.departamento || 'San Salvador',
-        municipioCode: companyData.municipioCode || '0606',
-        municipio: companyData.municipio || 'San Salvador',
+        correo: companyData.correo || '',
+        telefono: companyData.telefono || '',
+        complemento: companyData.complemento || '',
+        direccion: companyData.complemento || '', // direccion is alias for complemento
+        departamentoCode: companyData.departamentoCode || '',
+        departamento: companyData.departamento || '',
+        municipioCode: companyData.municipioCode || '',
+        municipio: companyData.municipio || '',
         // Economic Activity & Establishment
-        codActividad: companyData.codActividad || '62020',
-        descActividad: companyData.descActividad || 'Business',
-        tipoEstablecimiento: companyData.tipoEstablecimiento || '01',
-        establecimiento: companyData.establecimiento || 'Local Comercial',
+        codActividad: companyData.codActividad || '',
+        descActividad: companyData.descActividad || '',
+        tipoEstablecimiento: companyData.tipoEstablecimiento || '',
+        establecimiento: companyData.establecimiento || '',
         // MH codes
         codEstableMH: companyData.codEstableMH || 'M001',
         codEstable: companyData.codEstable || '',
@@ -218,8 +132,8 @@ export const updateCompany = createAsyncThunk(
         status: CompanyStatus.Active,
         isDefault: false,
         userId: 'user1',
-        createdAt: new Date('2024-01-01'),
-        updatedAt: new Date(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       } as Company;
       
       return updatedCompany;
@@ -366,10 +280,12 @@ const companySlice = createSlice({
         state.loading = false;
         state.currentCompany = action.payload;
         
-        // Update in companies array if exists
-        const existingIndex = state.companies.findIndex(c => c.id === action.payload.id);
-        if (existingIndex !== -1) {
-          state.companies[existingIndex] = action.payload;
+        // Update in companies array if exists and payload is not null
+        if (action.payload) {
+          const existingIndex = state.companies.findIndex(c => c.id === action.payload.id);
+          if (existingIndex !== -1) {
+            state.companies[existingIndex] = action.payload;
+          }
         }
       })
       .addCase(fetchCompanyById.rejected, (state, action) => {

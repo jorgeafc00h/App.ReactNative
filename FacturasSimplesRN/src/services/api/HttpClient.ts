@@ -194,6 +194,15 @@ export class HttpClient {
       let message = 'An error occurred';
       let code = API_ERROR_CODES.UNKNOWN_ERROR;
 
+      // Enhanced network diagnostic logging
+      if (__DEV__) {
+        console.log(`🔍 Network diagnostic info:`);
+        console.log(`   Request URL: ${error.config?.baseURL}${error.config?.url}`);
+        console.log(`   Status: ${status}`);
+        console.log(`   Response headers:`, error.response.headers);
+        console.log(`   Request method: ${error.config?.method?.toUpperCase()}`);
+      }
+
       // Try to parse error response
       if (typeof data === 'string') {
         message = data;
@@ -240,8 +249,26 @@ export class HttpClient {
 
       return new ApiError(message, status, code, data);
     } else if (error.request) {
+      // Enhanced network error diagnostics
+      if (__DEV__) {
+        console.log(`🔍 Network error diagnostic info:`);
+        console.log(`   Error code: ${error.code}`);
+        console.log(`   Request timeout: ${error.config?.timeout}ms`);
+        console.log(`   Base URL: ${error.config?.baseURL}`);
+        console.log(`   Network reachable: ${navigator.onLine !== undefined ? navigator.onLine : 'unknown'}`);
+      }
+
+      let message = 'Network error - please check your internet connection';
+      if (error.code === 'ECONNABORTED') {
+        message = 'Request timeout - server took too long to respond';
+      } else if (error.code === 'ENOTFOUND') {
+        message = 'DNS resolution failed - cannot reach server';
+      } else if (error.code === 'ECONNREFUSED') {
+        message = 'Connection refused - server is not accepting connections';
+      }
+
       return new ApiError(
-        'Network error - please check your internet connection',
+        message,
         0,
         API_ERROR_CODES.NETWORK_ERROR
       );

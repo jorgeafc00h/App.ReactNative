@@ -1,0 +1,190 @@
+Starting project at /Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN
+Starting Metro Bundler
+The following packages should be updated for best compatibility with the installed expo version:
+  @react-native-community/datetimepicker@8.5.1 - expected version: 8.4.4
+  expo@54.0.27 - expected version: ~54.0.28
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Android ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundling failed 580ms index.ts (1146 modules)
+ ERROR  ENOENT: no such file or directory, open '/Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN/node_modules/react-native-document-picker/package.json'
+
+Import stack:
+
+ src/services/security/CertificateService.ts
+ | import "react-native-document-picker"
+
+ src/screens/invoices/AddInvoiceScreen.tsx
+ | import "../../services/security/CertificateService"
+
+ src/navigation/InvoicesStack.tsx
+ | import "../screens/invoices/AddInvoiceScreen"
+
+ src/navigation/TabNavigator.tsx
+ | import "./InvoicesStack"
+
+ src/navigation/MainStack.tsx
+ | import "./TabNavigator"
+
+ src/navigation/AppNavigator.tsx
+ | import "./MainStack"
+
+ src/components/MainApp.tsx
+ | import "../navigation/AppNavigator"
+
+ App.tsx
+ | import "./src/components/MainApp"
+
+ index.ts
+ | import "./App"
+
+ 
+ | import "./index"
+
+Android ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundling failed 669ms index.ts (1284 modules)
+ ERROR  ENOENT: no such file or directory, open '/Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN/node_modules/react-native-print/package.json'
+
+Import stack:
+
+ src/services/pdf/PDFGenerationService.ts
+ | import "react-native-print"
+
+ src/screens/invoices/AddInvoiceScreen.tsx
+ | import "../../services/pdf/PDFGenerationService"
+
+ src/navigation/InvoicesStack.tsx
+ | import "../screens/invoices/AddInvoiceScreen"
+
+ src/navigation/TabNavigator.tsx
+ | import "./InvoicesStack"
+
+ src/navigation/MainStack.tsx
+ | import "./TabNavigator"
+
+ src/navigation/AppNavigator.tsx
+ | import "./MainStack"
+
+ src/components/MainApp.tsx
+ | import "../navigation/AppNavigator"
+
+ App.tsx
+ | import "./src/components/MainApp"
+
+ index.ts
+ | import "./App"
+
+ 
+ | import "./index"
+
+Android ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundling failed 458ms index.ts (1227 modules)
+ ERROR  ENOENT: no such file or directory, open '/Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN/node_modules/react-native-print/package.json'
+
+Import stack:
+
+ src/services/pdf/PDFGenerationService.ts
+ | import "react-native-print"
+
+ src/screens/invoices/AddInvoiceScreen.tsx
+ | import "../../services/pdf/PDFGenerationService"
+
+ src/navigation/InvoicesStack.tsx
+ | import "../screens/invoices/AddInvoiceScreen"
+
+ src/navigation/TabNavigator.tsx
+ | import "./InvoicesStack"
+
+ src/navigation/MainStack.tsx
+ | import "./TabNavigator"
+
+ src/navigation/AppNavigator.tsx
+ | import "./MainStack"
+
+ src/components/MainApp.tsx
+ | import "../navigation/AppNavigator"
+
+ App.tsx
+ | import "./src/components/MainApp"
+
+ index.ts
+ | import "./App"
+
+ 
+ | import "./index"
+
+Android ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundling failed 289ms index.ts (1083 modules)
+ ERROR  ENOENT: no such file or directory, open '/Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN/node_modules/react-native-print/package.json'
+
+Import stack:
+
+ src/services/pdf/PDFGenerationService.ts
+ | import "react-native-print"
+
+ src/screens/invoices/AddInvoiceScreen.tsx
+ | import "../../services/pdf/PDFGenerationService"
+
+ src/navigation/InvoicesStack.tsx
+ | import "../screens/invoices/AddInvoiceScreen"
+
+ src/navigation/TabNavigator.tsx
+ | import "./InvoicesStack"
+
+ src/navigation/MainStack.tsx
+ | import "./TabNavigator"
+
+ src/navigation/AppNavigator.tsx
+ | import "./MainStack"
+
+ src/components/MainApp.tsx
+ | import "../navigation/AppNavigator"
+
+ App.tsx
+ | import "./src/components/MainApp"
+
+ index.ts
+ | import "./App"
+
+ 
+ | import "./index"
+
+Android ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundling failed 751ms index.ts (1109 modules)
+ ERROR  ENOENT: no such file or directory, open '/Users/jorgeflores/github/App.ReactNative/FacturasSimplesRN/node_modules/react-native-print/package.json'
+
+Import stack:
+
+ src/services/pdf/PDFGenerationService.ts
+ | import "react-native-print"
+
+ src/screens/invoices/AddInvoiceScreen.tsx
+ | import "../../services/pdf/PDFGenerationService"
+
+ src/navigation/InvoicesStack.tsx
+ | import "../screens/invoices/AddInvoiceScreen"
+
+ src/navigation/TabNavigator.tsx
+ | import "./InvoicesStack"
+
+ src/navigation/MainStack.tsx
+ | import "./TabNavigator"
+
+ src/navigation/AppNavigator.tsx
+ | import "./MainStack"
+
+ src/components/MainApp.tsx
+ | import "../navigation/AppNavigator"
+
+ App.tsx
+ | import "./src/components/MainApp"
+
+ index.ts
+ | import "./App"
+
+ 
+ | import "./index"
+
+Android ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 459ms index.ts (1346 modules)

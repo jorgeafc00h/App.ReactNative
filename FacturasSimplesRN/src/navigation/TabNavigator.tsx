@@ -1,10 +1,11 @@
 import React from 'react';
-import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import InvoicesStack from './InvoicesStack';
-import { ProductsScreen } from '../screens/products/ProductsScreen';
+import ProductsStack from './ProductsStack';
 import CustomersStack from './CustomersStack';
+import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { useTheme } from '../hooks/useTheme';
 
 const Tab = createBottomTabNavigator();
@@ -16,30 +17,35 @@ export const TabNavigator: React.FC = () => {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName = '';
+          let iconName: keyof typeof Ionicons.glyphMap = 'home-outline';
 
-          switch (route.name) {
-            case 'Home':
-              iconName = '🏠';
-              break;
-            case 'Invoices':
-              iconName = '📄';
-              break;
-            case 'Products':
-              iconName = '📦';
-              break;
-            case 'Customers':
-              iconName = '👥';
-              break;
+          if (route?.name) {
+            switch (route.name) {
+              case 'Home':
+                iconName = focused ? 'home' : 'home-outline';
+                break;
+              case 'Settings':
+                iconName = focused ? 'settings' : 'settings-outline';
+                break;
+              case 'Customers':
+                iconName = focused ? 'people' : 'people-outline';
+                break;
+              case 'Invoices':
+                iconName = focused ? 'receipt' : 'receipt-outline';
+                break;
+              case 'Products':
+                iconName = focused ? 'grid' : 'grid-outline';
+                break;
+            }
           }
 
-          return <Text style={{ fontSize: size, color }}>{iconName}</Text>;
+          return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.text.secondary,
         tabBarStyle: {
           backgroundColor: theme.colors.surface.primary,
-          borderTopColor: theme.colors.border,
+          borderTopColor: theme.colors.border.light,
           paddingBottom: 8,
           paddingTop: 8,
           height: 60,
@@ -67,17 +73,24 @@ export const TabNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen 
+        name="Customers" 
+        component={CustomersStack}
+        options={{ 
+          tabBarLabel: 'Clientes',
+        }}
+      />
+      <Tab.Screen 
         name="Products" 
-        component={ProductsScreen}
+        component={ProductsStack}
         options={{ 
           tabBarLabel: 'Productos',
         }}
       />
       <Tab.Screen 
-        name="Customers" 
-        component={CustomersStack}
+        name="Settings" 
+        component={SettingsScreen}
         options={{ 
-          tabBarLabel: 'Clientes',
+          tabBarLabel: 'Perfil',
         }}
       />
     </Tab.Navigator>

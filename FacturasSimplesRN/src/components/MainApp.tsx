@@ -4,8 +4,11 @@ import React, { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppDispatch, useAppSelector } from '../store';
 import { initializeApp } from '../store/slices/appSlice';
-import { fetchCompanies } from '../store/slices/companySlice';
+import { fetchCompanies, resetCompanies } from '../store/slices/companySlice';
 import { syncCatalogs } from '../store/slices/catalogSlice';
+import { resetCustomers } from '../store/slices/customerSlice';
+import { resetInvoices } from '../store/slices/invoiceSlice';
+import { resetProducts } from '../store/slices/productSlice';
 import { selectIsAppInitialized, selectIsOnline } from '../store/selectors/appSelectors';
 import { selectIsAuthenticated, selectIsGuestMode } from '../store/selectors/authSelectors';
 import { LoadingSpinner } from './common/LoadingSpinner';
@@ -24,21 +27,55 @@ export const MainApp: React.FC = () => {
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Initialize the app
-    dispatch(initializeApp());
+    // Clear any persisted sample data for clean startup
+    const clearSampleData = async () => {
+      try {
+        console.log('MainApp: Clearing any persisted sample data...');
+        await AsyncStorage.multiRemove([
+          'persist:companies',
+          'persist:customers', 
+          'persist:invoices'
+        ]);
+        console.log('MainApp: Successfully cleared persisted sample data');
+      } catch (error) {
+        console.warn('MainApp: Failed to clear persisted data:', error);
+      }
+    };
     
-    // Check if user has seen onboarding
-    checkOnboardingStatus();
+    clearSampleData().then(() => {
+      // Reset all data slices to ensure clean state
+      console.log('MainApp: Resetting Redux state for clean startup...');
+      dispatch(resetCompanies());
+      dispatch(resetCustomers());
+      dispatch(resetInvoices());
+      dispatch(resetProducts());
+      
+      // Initialize the app after clearing old data
+      dispatch(initializeApp());
+      
+      // Check if user has seen onboarding
+      checkOnboardingStatus();
+    });
   }, [dispatch]);
 
   useEffect(() => {
     if (isInitialized && isOnline) {
-      // Sync catalogs on app start
-      dispatch(syncCatalogs({}));
+      // Sync catalogs on app start with error handling
+      dispatch(syncCatalogs({}))
+        .unwrap()
+        .catch((error) => {
+          console.warn('MainApp: Failed to sync catalogs on startup:', error);
+          // Don't block app startup for catalog sync failures
+        });
       
-      // Load companies if authenticated
+      // Load companies if authenticated with error handling
       if (isAuthenticated) {
-        dispatch(fetchCompanies({}));
+        dispatch(fetchCompanies({}))
+          .unwrap()
+          .catch((error) => {
+            console.warn('MainApp: Failed to fetch companies on startup:', error);
+            // Don't block app startup for company fetch failures
+          });
       }
     }
   }, [isInitialized, isOnline, isAuthenticated, dispatch]);

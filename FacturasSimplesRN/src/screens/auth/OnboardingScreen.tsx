@@ -138,8 +138,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
     }
   };
 
-  const handleSkipOnboarding = () => {
-    console.log('Onboarding skipped. Setting guest mode and completing onboarding...');
+  const handleSkipToMainApp = () => {
+    console.log('Skipping onboarding. Dispatching setGuestMode action...');
     dispatch(setGuestMode(true));
     
     if (onComplete) {
@@ -154,6 +154,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
       console.log('No onComplete prop provided, Redux state updated only');
     }
   };
+
 
   const goToNext = () => {
     if (currentIndex < onboardingData.length - 1) {
@@ -301,6 +302,17 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
     <View style={styles.container}>
       <StatusBar style="light" />
       
+      {/* Skip Button - Only show on first screen */}
+      {currentIndex === 0 && (
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={handleSkipToMainApp}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.skipButtonText}>Continuar sin configurar</Text>
+        </TouchableOpacity>
+      )}
+      
       <View style={styles.scrollContainer}>
         <Animated.View
           style={[
@@ -343,14 +355,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
           </Text>
         </TouchableOpacity>
 
-        {currentIndex < onboardingData.length - 1 && (
-          <TouchableOpacity
-            style={[styles.button, styles.skipButton]}
-            onPress={handleSkipOnboarding}
-          >
-            <Text style={styles.skipButtonText}>Omitir</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Company Configuration Modal */}
@@ -489,10 +493,18 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   nextButton: {
-    backgroundColor: 'white',
+    backgroundColor: '#FFFFFF',
     flex: 1,
     marginHorizontal: 20,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
   },
   nextButtonText: {
     color: '#1f2937',
@@ -500,10 +512,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   skipButton: {
-    backgroundColor: 'transparent',
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   skipButtonText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 16,
+    color: '#1f2937',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

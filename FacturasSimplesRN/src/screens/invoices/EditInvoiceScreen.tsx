@@ -20,8 +20,8 @@ import { fetchProducts } from '../../store/slices/productSlice';
 import { RootStackParamList } from '../../types';
 import { useTheme } from '../../hooks/useTheme';
 import { Invoice, InvoiceType, InvoiceStatus, UpdateInvoiceInput } from '../../types/invoice';
-import { CustomerPicker } from '../../components/customers/CustomerPicker';
-import { ProductSelector } from '../../components/products/ProductSelector';
+import { CustomerPicker } from '../../components/invoices/CustomerPicker';
+import { ProductSelector } from '../../components/invoices/ProductSelector';
 
 type EditInvoiceRouteProp = RouteProp<RootStackParamList, 'EditInvoice'>;
 type EditInvoiceNavigationProp = StackNavigationProp<RootStackParamList, 'EditInvoice'>;

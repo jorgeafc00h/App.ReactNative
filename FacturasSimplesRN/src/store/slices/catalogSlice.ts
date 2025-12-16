@@ -26,7 +26,13 @@ export const syncCatalogs = createAsyncThunk(
       if (!params?.force) {
         const shouldSync = await catalogService.shouldSync();
         if (!shouldSync) {
-          throw new Error('Catalogs are up to date');
+          console.log('📋 CatalogService: Catalogs are up to date, skipping sync');
+          // Return empty result instead of throwing error
+          return {
+            catalogs: [],
+            syncDate: new Date().toISOString(),
+            skipped: true,
+          };
         }
       }
 

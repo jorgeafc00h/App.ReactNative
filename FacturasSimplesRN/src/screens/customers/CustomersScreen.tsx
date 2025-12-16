@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,10 @@ import {
   TextInput,
   FlatList,
   RefreshControl,
+  Alert,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -21,9 +24,10 @@ import {
   selectCustomerSearchTerm,
   selectCustomerFilters,
 } from '../../store/selectors/customerSelectors';
-import { setSearchTerm, setFilters, setCurrentCustomer } from '../../store/slices/customerSlice';
+import { setSearchTerm, setFilters, setCurrentCustomer, deleteCustomer } from '../../store/slices/customerSlice';
 import { CustomerType, Customer } from '../../types/customer';
 import { CustomersStackParamList } from '../../navigation/types';
+import { CustomersListItem } from '../../components/customers/CustomersListItem';
 
 type CustomersNavigation = StackNavigationProp<CustomersStackParamList, 'CustomersList'>;
 
@@ -53,6 +57,10 @@ export const CustomersScreen: React.FC = () => {
   const loading = useAppSelector(selectCustomersLoading);
   const searchTerm = useAppSelector(selectCustomerSearchTerm);
   const filters = useAppSelector(selectCustomerFilters);
+  const { currentCompany } = useAppSelector(state => state.companies);
+  const { invoices } = useAppSelector(state => state.invoices);
+
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
 
   // Translate the current filter selection into a tab value to mirror Swift UI chips
   const activeFilter = useMemo<FilterKey>(() => {
@@ -102,76 +110,80 @@ export const CustomersScreen: React.FC = () => {
     }
   };
 
-  const renderCustomer = ({ item }: { item: Customer }) => {
-    const isBusiness = item.customerType === CustomerType.Business;
-    const displayName = item.businessName || `${item.firstName} ${item.lastName}`;
-    const accentColor = isBusiness ? '#3B82F6' : '#10B981';
+  const handleDeleteCustomer = (customer: Customer) => {
+    // Check if customer has associated invoices (matching Swift logic)
+    const customerInvoices = invoices.filter(invoice => invoice.customerId === customer.id);
+    
+    if (customerInvoices.length > 0) {
+      Alert.alert(
+        'Error',
+        `No se puede eliminar un cliente con ${customerInvoices.length} facturas asociadas`,
+        [{ text: 'OK', style: 'default' }]
+      );
+      return;
+    }
 
+    Alert.alert(
+      'Eliminar Cliente',
+      `¿Está seguro que desea eliminar el cliente: ${customer.businessName || `${customer.firstName} ${customer.lastName}`} de manera permanente?`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            dispatch(deleteCustomer(customer.id));
+          },
+        },
+      ]
+    );
+  };
+
+  const renderRightActions = (customer: Customer) => {
     return (
-      <TouchableOpacity
-        style={[styles.customerCard, { backgroundColor: theme.colors.surface.primary }]}
-        activeOpacity={0.7}
-        onPress={() => handleSelectCustomer(item.id)}
+      <View style={styles.rightActions}>
+        <TouchableOpacity
+          style={[styles.deleteButton, { backgroundColor: theme.colors.error }]}
+          onPress={() => handleDeleteCustomer(customer)}
+        >
+          <Ionicons name="trash" size={20} color="white" />
+          <Text style={styles.deleteButtonText}>Eliminar</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderCustomer = ({ item }: { item: Customer }) => {
+    return (
+      <Swipeable
+        renderRightActions={() => renderRightActions(item)}
+        rightThreshold={40}
       >
-        <View style={styles.customerHeader}>
-          <View style={styles.customerInfo}>
-            <View style={styles.customerNameRow}>
-              <Text style={styles.typeIcon}>{isBusiness ? '🏢' : '👤'}</Text>
-              <Text style={[styles.customerName, { color: theme.colors.text.primary }]}>
-                {displayName}
-              </Text>
-            </View>
-            <Text style={[styles.customerDocument, { color: theme.colors.text.secondary }]}>
-              {`${item.documentType}: ${item.nationalId}`}
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.typeBadge,
-              { backgroundColor: `${accentColor}20` },
-            ]}
-          >
-            <Text style={[styles.typeText, { color: accentColor }]}>
-              {isBusiness ? 'Empresa' : 'Persona'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.customerDetails}>
-          <Text style={[styles.contactItem, { color: theme.colors.text.secondary }]}>📧 {item.email}</Text>
-          <Text style={[styles.contactItem, { color: theme.colors.text.secondary }]}>📞 {item.phone}</Text>
-          {item.city ? (
-            <Text style={[styles.contactItem, { color: theme.colors.text.secondary }]}>📍 {item.city}</Text>
-          ) : null}
-        </View>
-
-        <View style={styles.customerFooter}>
-          <Text style={[styles.lastUpdated, { color: theme.colors.text.secondary }]}>
-            Actualizado {formatDate(item.updatedAt)}
-          </Text>
-          <TouchableOpacity
-            style={styles.moreButton}
-            onPress={() => handleSelectCustomer(item.id)}
-          >
-            <Text style={[styles.moreText, { color: theme.colors.text.secondary }]}>⋯</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
+        <CustomersListItem
+          customer={item}
+          onPress={() => handleSelectCustomer(item.id)}
+        />
+      </Swipeable>
     );
   };
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Text style={[styles.emptyTitle, { color: theme.colors.text.primary }]}>Sin clientes</Text>
+      <View style={[styles.emptyIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+        <Ionicons name="people" size={48} color={theme.colors.primary} />
+      </View>
+      <Text style={[styles.emptyTitle, { color: theme.colors.text.primary }]}>Clientes</Text>
       <Text style={[styles.emptySubtitle, { color: theme.colors.text.secondary }]}>
-        Agrega un nuevo cliente para comenzar a facturar
+        Los nuevos clientes aparecerán aquí.
       </Text>
       <TouchableOpacity
-        style={[styles.emptyButton, { borderColor: theme.colors.primary }]}
+        style={[styles.emptyButton, { backgroundColor: theme.colors.primary }]}
         onPress={handleAddCustomer}
       >
-        <Text style={[styles.emptyButtonText, { color: theme.colors.primary }]}>Agregar cliente</Text>
+        <Text style={styles.emptyButtonText}>Agregar Cliente</Text>
       </TouchableOpacity>
     </View>
   );
@@ -183,7 +195,9 @@ export const CustomersScreen: React.FC = () => {
       <View style={styles.header}>
         <View>
           <Text style={[styles.subtitle, { color: theme.colors.text.secondary }]}>Base de clientes</Text>
-          <Text style={[styles.title, { color: theme.colors.text.primary }]}>Clientes</Text>
+          <Text style={[styles.title, { color: theme.colors.text.primary }]}>
+            {currentCompany ? `Clientes: ${currentCompany.nombreComercial}` : 'Clientes'}
+          </Text>
         </View>
         <TouchableOpacity
           style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
@@ -380,104 +394,62 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   listContent: {
-    paddingHorizontal: 20,
     paddingBottom: 32,
-  },
-  customerCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.06)',
-  },
-  customerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  customerInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  customerNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  typeIcon: {
-    fontSize: 18,
-    marginRight: 8,
-  },
-  customerName: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  customerDocument: {
-    fontSize: 14,
-  },
-  typeBadge: {
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  typeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  customerDetails: {
-    marginTop: 12,
-    gap: 4,
-  },
-  contactItem: {
-    fontSize: 14,
-  },
-  customerFooter: {
-    marginTop: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  lastUpdated: {
-    fontSize: 12,
-  },
-  moreButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  moreText: {
-    fontSize: 24,
-    lineHeight: 24,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 80,
+    paddingTop: 120,
+    paddingHorizontal: 40,
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: 'bold',
     marginBottom: 8,
+    textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: 16,
     textAlign: 'center',
-    marginHorizontal: 24,
-    marginBottom: 20,
+    lineHeight: 24,
+    marginBottom: 32,
   },
   emptyButton: {
-    borderWidth: 1,
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
   },
   emptyButtonText: {
+    color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  rightActions: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 80,
+  },
+  deleteButton: {
+    width: 70,
+    height: '90%',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 6,
+  },
+  deleteButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });
 

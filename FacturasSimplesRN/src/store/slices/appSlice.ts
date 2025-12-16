@@ -9,6 +9,7 @@ const initialState: AppState = {
   isOnline: true,
   currentTheme: 'system',
   language: 'es', // Default to Spanish for El Salvador
+  environment: 'development', // Added missing environment property
   lastSyncDate: undefined,
   syncStatus: 'idle',
   notifications: [],
@@ -19,22 +20,39 @@ export const initializeApp = createAsyncThunk(
   'app/initializeApp',
   async (_, { dispatch }) => {
     try {
+      console.log('🚀 Initializing app...');
+      
+      // Check network connectivity first
+      const connectivityResult = await dispatch(checkConnectivity()).unwrap();
+      console.log('🌐 Connectivity check result:', connectivityResult);
+      
+      // Test API connectivity if we have internet
+      if (connectivityResult.isOnline) {
+        console.log('🔗 Testing API endpoints...');
+        try {
+          const apiResult = await dispatch(testApiConnectivity()).unwrap();
+          console.log('🔗 API test results:', apiResult);
+        } catch (error) {
+          console.warn('🔗 API connectivity test failed:', error);
+        }
+      }
+      
       // TODO: Load user preferences from storage
       // TODO: Check for stored auth session
       // TODO: Initialize database
-      // TODO: Check network connectivity
       
-      // Simulate app initialization
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('✅ App initialization completed');
       
       return {
         isInitialized: true,
+        isOnline: connectivityResult.isOnline,
         preferences: {
           theme: 'system',
           language: 'es',
         }
       };
     } catch (error: any) {
+      console.error('❌ App initialization failed:', error);
       throw new Error(`App initialization failed: ${error.message}`);
     }
   }
@@ -44,11 +62,100 @@ export const checkConnectivity = createAsyncThunk(
   'app/checkConnectivity',
   async () => {
     try {
-      // TODO: Implement actual network check
-      // For now, assume we're online
-      return { isOnline: true };
+      console.log('🌐 Checking network connectivity...');
+      
+      // Test general internet connectivity first
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      const response = await fetch('https://www.google.com/favicon.ico', {
+        method: 'HEAD',
+        signal: controller.signal,
+        cache: 'no-cache'
+      });
+      
+      clearTimeout(timeoutId);
+      
+      const isOnline = response.ok;
+      console.log(`🌐 General connectivity: ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
+      
+      return { isOnline };
     } catch (error) {
+      console.log('🌐 Network connectivity: OFFLINE (error:', error, ')');
       return { isOnline: false };
+    }
+  }
+);
+
+export const testApiConnectivity = createAsyncThunk(
+  'app/testApiConnectivity',
+  async (_, { rejectWithValue }) => {
+    try {
+      console.log('🔗 Testing API connectivity...');
+      
+      // Import API config
+      const { getApiConfig, API_ENDPOINTS } = await import('../../config/api');
+      
+      // Test both environments
+      const devConfig = getApiConfig(false);
+      const prodConfig = getApiConfig(true);
+      
+      const testEndpoint = async (baseUrl: string, env: string) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        try {
+          const url = `${baseUrl}${API_ENDPOINTS.CATALOG}`;
+          console.log(`🔗 Testing ${env} API: ${url}`);
+          
+          const response = await fetch(url, {
+            method: 'GET',
+            signal: controller.signal,
+            cache: 'no-cache',
+            headers: {
+              'Accept': 'application/json',
+              'apiKey': 'eyJhbGciOiJFUzI1NiIsImtpZCI6IlVSS0VZSUQwMDEifQ'
+            }
+          });
+          
+          clearTimeout(timeoutId);
+          
+          console.log(`🔗 ${env} API response: ${response.status} ${response.statusText}`);
+          
+          return {
+            env,
+            url,
+            status: response.status,
+            ok: response.ok,
+            statusText: response.statusText
+          };
+        } catch (error) {
+          clearTimeout(timeoutId);
+          console.error(`🔗 ${env} API failed:`, error);
+          
+          return {
+            env,
+            url: `${baseUrl}${API_ENDPOINTS.CATALOG}`,
+            status: 0,
+            ok: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          };
+        }
+      };
+      
+      const [devResult, prodResult] = await Promise.all([
+        testEndpoint(devConfig.baseUrl, 'DEV'),
+        testEndpoint(prodConfig.baseUrl, 'PROD')
+      ]);
+      
+      return {
+        dev: devResult,
+        prod: prodResult,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('🔗 API connectivity test failed:', error);
+      return rejectWithValue(error instanceof Error ? error.message : 'Unknown error');
     }
   }
 );

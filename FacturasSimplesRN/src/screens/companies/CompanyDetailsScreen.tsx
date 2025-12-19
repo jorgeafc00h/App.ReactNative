@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 // @ts-ignore - Expo vector icons are available at runtime
 import { Ionicons } from '@expo/vector-icons';
@@ -15,9 +16,22 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 
 import { useTheme } from '../../hooks/useTheme';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { setSelectedCompany, deleteCompany, setDefaultCompany } from '../../store/slices/companySlice';
+import { setSelectedCompany, deleteCompany, setDefaultCompany, updateCompany } from '../../store/slices/companySlice';
 import { Company, CompanyEnvironment } from '../../types/company';
 import { ModernSettingsCard } from '../../components/ModernSettingsCard';
+import { InvoiceService } from '../../services/api/InvoiceService';
+import { CertificateService } from '../../services/security/CertificateService';
+
+// Import modals
+import {
+  EditCompanyModal,
+  CertificateCredentialsModal,
+  HaciendaCredentialsModal,
+  LogoEditorModal,
+  PurchasesModuleModal,
+  RequestProductionAccessModal,
+  EmailReaderSettings,
+} from '../../components/modals';
 
 interface RouteParams {
   companyId: string;
@@ -35,14 +49,29 @@ const CompanyDetailsScreen: React.FC = () => {
 
   const company = companies.find(c => c.id === companyId);
   const isSelected = currentCompany?.id === companyId;
-  const isTestAccount = company?.environment === CompanyEnvironment.Development;
+  // Matches Swift: company.isTestAccount - true means test/development environment
+  const isTestAccount = company?.isTestAccount ?? (company?.environment === CompanyEnvironment.Development);
+  // Computed isProduction - matches Swift Company.isProduction computed property
+  const isProduction = !isTestAccount;
 
-  const [certificateStatus, setCertificateStatus] = useState<'loading' | 'valid' | 'invalid'>('valid');
-  const [credentialsStatus, setCredentialsStatus] = useState<'loading' | 'valid' | 'invalid'>('valid');
+  // Validation status states - matches Swift's viewModel states
+  const [isLoadingCertificateStatus, setIsLoadingCertificateStatus] = useState(false);
+  const [isLoadingCredentialsStatus, setIsLoadingCredentialsStatus] = useState(false);
+  const [certificateStatus, setCertificateStatus] = useState<'loading' | 'valid' | 'invalid'>('loading');
+  const [credentialsStatus, setCredentialsStatus] = useState<'loading' | 'valid' | 'invalid'>('loading');
   const [requiresTestInvoices, setRequiresTestInvoices] = useState(true);
+
+  // Modal visibility states
+  const [showEditCompanyModal, setShowEditCompanyModal] = useState(false);
+  const [showCertificateModal, setShowCertificateModal] = useState(false);
+  const [showHaciendaCredentialsModal, setShowHaciendaCredentialsModal] = useState(false);
+  const [showLogoEditorModal, setShowLogoEditorModal] = useState(false);
+  const [showPurchasesModuleModal, setShowPurchasesModuleModal] = useState(false);
+  const [showProductionAccessModal, setShowProductionAccessModal] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  // Animation effect
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -50,6 +79,77 @@ const CompanyDetailsScreen: React.FC = () => {
       useNativeDriver: true,
     }).start();
   }, []);
+
+  /**
+   * Validate certificate credentials on mount - matches Swift's validateCertificateCredentialsAsync
+   */
+  const validateCertificateCredentials = useCallback(async () => {
+    if (!company?.nit) return;
+    
+    setIsLoadingCertificateStatus(true);
+    setCertificateStatus('loading');
+    
+    try {
+      const certificateService = new CertificateService(isProduction);
+      const result = await certificateService.validateCertificate(
+        company.nit,
+        company.certificatePassword || ''
+      );
+      
+      console.log('Certificate Validation Result:', result);
+      
+      if (!result || !result.isValid) {
+        setCertificateStatus('invalid');
+      } else {
+        setCertificateStatus('valid');
+      }
+    } catch (error) {
+      console.error('Certificate validation error:', error);
+      setCertificateStatus('invalid');
+    } finally {
+      setIsLoadingCertificateStatus(false);
+    }
+  }, [company, isProduction]);
+
+  /**
+   * Validate Hacienda credentials on mount - matches Swift's validateCredentialsAsync
+   */
+  const validateCredentials = useCallback(async () => {
+    if (!company?.nit) return;
+    
+    setIsLoadingCredentialsStatus(true);
+    setCredentialsStatus('loading');
+    
+    try {
+      const invoiceService = new InvoiceService(isProduction);
+      const isValid = await invoiceService.validateCredentials(
+        company.nit,
+        company.credentials || '',
+        false // forceRefresh
+      );
+      
+      console.log('Credentials Validation Result:', isValid);
+      
+      if (!isValid) {
+        setCredentialsStatus('invalid');
+      } else {
+        setCredentialsStatus('valid');
+      }
+    } catch (error) {
+      console.error('Credentials validation error:', error);
+      setCredentialsStatus('invalid');
+    } finally {
+      setIsLoadingCredentialsStatus(false);
+    }
+  }, [company]);
+
+  // Validate credentials on mount and company change - matches Swift's refreshLabels()
+  useEffect(() => {
+    if (company) {
+      validateCertificateCredentials();
+      validateCredentials();
+    }
+  }, [company?.id, validateCertificateCredentials, validateCredentials]);
 
   if (!company) {
     return (
@@ -64,26 +164,25 @@ const CompanyDetailsScreen: React.FC = () => {
   const companyInvoices = invoices.filter(invoice => invoice.companyId === company.id);
   const invoiceSummary = {
     total: companyInvoices.length,
-    // Note: Invoice type field may need to be added to Invoice interface
-    creditNotes: 0, // companyInvoices.filter(inv => inv.type === 'credit_note').length,
-    fiscalDocuments: companyInvoices.length, // All invoices for now
+    creditNotes: 0,
+    fiscalDocuments: companyInvoices.length,
   };
 
+  // Handler functions - matches Swift's button actions
   const handleSetAsDefault = () => {
+    if (isSelected) return; // Already selected
+    
     Alert.alert(
       '¿Desea establecer esta empresa como predeterminada para gestionar facturas?',
       '',
       [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
+        { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Confirmar',
           onPress: () => {
             dispatch(setDefaultCompany(company.id));
             dispatch(setSelectedCompany(company.id));
-            Alert.alert('Empresa predeterminada actualizada');
+            Alert.alert('Éxito', 'Empresa predeterminada actualizada');
           },
         },
       ]
@@ -91,32 +190,67 @@ const CompanyDetailsScreen: React.FC = () => {
   };
 
   const handleEditCompany = () => {
-    // Navigate to company edit screen - this functionality will be implemented later
-    Alert.alert(
-      'Editar Empresa', 
-      'La funcionalidad de editar empresa estará disponible próximamente.',
-      [{ text: 'OK' }]
-    );
+    setShowEditCompanyModal(true);
+  };
+
+  const handleCompanySaved = (updatedCompany: Company) => {
+    dispatch(updateCompany(updatedCompany));
+    // Revalidate after company update
+    validateCertificateCredentials();
+    validateCredentials();
   };
 
   const handleCertificateCredentials = () => {
-    Alert.alert('Credenciales de Certificado', 'Funcionalidad en desarrollo');
+    setShowCertificateModal(true);
+  };
+
+  const handleCertificateUpdated = (isValid: boolean) => {
+    setCertificateStatus(isValid ? 'valid' : 'invalid');
+    // Refresh validation
+    validateCertificateCredentials();
   };
 
   const handleHaciendaCredentials = () => {
-    Alert.alert('Credenciales Hacienda', 'Funcionalidad en desarrollo');
+    setShowHaciendaCredentialsModal(true);
+  };
+
+  const handleCredentialsUpdated = (isValid: boolean) => {
+    setCredentialsStatus(isValid ? 'valid' : 'invalid');
+    // Refresh validation
+    validateCredentials();
   };
 
   const handleProductionAccess = () => {
-    Alert.alert('Solicitar Autorización a Producción', 'Funcionalidad en desarrollo');
+    setShowProductionAccessModal(true);
+  };
+
+  const handleProductionAccessCompletion = (productionCompany?: Company) => {
+    // Set requiresTestInvoices to false to show green button
+    setRequiresTestInvoices(false);
+    console.log('✅ Production access process completed');
+    
+    if (productionCompany) {
+      console.log('✅ Production company created:', productionCompany.nombreComercial);
+      // TODO: Add production company to store if needed
+    }
   };
 
   const handleLogoEditor = () => {
-    Alert.alert('Editar Logo de Facturas', 'Funcionalidad en desarrollo');
+    setShowLogoEditorModal(true);
+  };
+
+  const handleLogoSaved = (updatedCompany: Company) => {
+    dispatch(updateCompany(updatedCompany));
   };
 
   const handlePurchasesModule = () => {
-    Alert.alert('Modulo Compras', 'Funcionalidad en desarrollo');
+    setShowPurchasesModuleModal(true);
+  };
+
+  const handlePurchasesSettingsSaved = (settings: EmailReaderSettings) => {
+    // TODO: Save email reader settings to company or separate storage
+    console.log('Email reader settings saved:', settings);
+    Alert.alert('Éxito', 'Configuración de módulo de compras guardada');
   };
 
   const handleDeleteCompany = () => {
@@ -142,10 +276,7 @@ const CompanyDetailsScreen: React.FC = () => {
       '¿Está seguro que desea eliminar esta empresa?',
       'Esta acción no se puede deshacer.',
       [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
+        { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Eliminar',
           style: 'destructive',
@@ -158,16 +289,33 @@ const CompanyDetailsScreen: React.FC = () => {
     );
   };
 
+  // Warning checks - matches Swift's hasAnyMissingField(), hasMissingInvoiceLogo(), etc.
+  const hasAnyMissingField = () => {
+    if (!company) return true;
+    return !company.nit || !company.nrc || !company.codActividad || 
+           !company.nombre || !company.nombreComercial;
+  };
+
+  const hasMissingInvoiceLogo = () => {
+    if (!company) return true;
+    return !company.invoiceLogo && !company.logoUrl;
+  };
+
+  const hasMissingEmailConfiguration = () => {
+    if (!company) return true;
+    return !company.correo;
+  };
+
   const getWarningForField = (field: 'company' | 'certificate' | 'credentials' | 'logo' | 'email') => {
     switch (field) {
       case 'company':
-        return !company.nit || !company.nrc || !company.codActividad;
+        return hasAnyMissingField();
       case 'certificate':
         return certificateStatus === 'invalid';
       case 'credentials':
         return credentialsStatus === 'invalid';
       case 'logo':
-        return !company.logoUrl; // Assuming logoUrl field exists
+        return hasMissingInvoiceLogo();
       case 'email':
         return !company.correo;
       default:
@@ -206,7 +354,7 @@ const CompanyDetailsScreen: React.FC = () => {
                       styles.environmentText,
                       { color: isTestAccount ? '#F59E0B' : '#10B981' }
                     ]}>
-                      {isTestAccount ? 'Ambiente Pruebas' : 'Ambiente Productivo'}
+                      {isProduction ? 'Producción' : 'Desarrollo'}
                     </Text>
                   </View>
                   <Ionicons 
@@ -340,46 +488,86 @@ const CompanyDetailsScreen: React.FC = () => {
             />
           </View>
 
-          {/* Status Section */}
+          {/* Status Section - Matches Swift's StatusSection */}
           <View style={[styles.statusSection, { backgroundColor: theme.colors.surface.primary }]}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>
               Estado del Sistema
             </Text>
             
+            {/* Certificate Status */}
             <View style={styles.statusItem}>
-              <Text style={[styles.statusLabel, { color: theme.colors.text.primary }]}>
-                Certificado Hacienda
-              </Text>
-              <View style={styles.statusIndicator}>
-                <View style={[
-                  styles.statusDot,
-                  { backgroundColor: certificateStatus === 'invalid' ? '#EF4444' : '#0EA5E9' }
-                ]} />
-                <Text style={[
-                  styles.statusText,
-                  { color: certificateStatus === 'invalid' ? '#EF4444' : '#0EA5E9' }
-                ]}>
-                  {certificateStatus === 'invalid' ? 'Invalido' : 'OK'}
-                </Text>
-              </View>
+              {isLoadingCertificateStatus ? (
+                <View style={styles.loadingStatusContainer}>
+                  <ActivityIndicator size="small" color="#0EA5E9" />
+                  <Text style={[styles.loadingStatusText, { color: '#0EA5E9' }]}>
+                    Verificando Certificado...
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={[
+                    styles.statusLabel, 
+                    { color: certificateStatus === 'invalid' ? '#EF4444' : '#0EA5E9' }
+                  ]}>
+                    Certificado Hacienda
+                  </Text>
+                  <View style={styles.statusIndicator}>
+                    <View style={[
+                      styles.statusDot,
+                      { backgroundColor: certificateStatus === 'invalid' ? '#EF4444' : '#0EA5E9' }
+                    ]} />
+                    <Text style={[
+                      styles.statusText,
+                      { 
+                        color: certificateStatus === 'invalid' ? '#EF4444' : '#0EA5E9',
+                        backgroundColor: certificateStatus === 'invalid' 
+                          ? 'rgba(239, 68, 68, 0.09)' 
+                          : 'rgba(14, 165, 233, 0.09)'
+                      }
+                    ]}>
+                      {certificateStatus === 'invalid' ? 'Invalido' : 'OK'}
+                    </Text>
+                  </View>
+                </>
+              )}
             </View>
 
+            {/* Credentials Status */}
             <View style={styles.statusItem}>
-              <Text style={[styles.statusLabel, { color: theme.colors.text.primary }]}>
-                Credenciales Hacienda
-              </Text>
-              <View style={styles.statusIndicator}>
-                <View style={[
-                  styles.statusDot,
-                  { backgroundColor: credentialsStatus === 'invalid' ? '#EF4444' : '#0EA5E9' }
-                ]} />
-                <Text style={[
-                  styles.statusText,
-                  { color: credentialsStatus === 'invalid' ? '#EF4444' : '#0EA5E9' }
-                ]}>
-                  {credentialsStatus === 'invalid' ? 'Invalido' : 'OK'}
-                </Text>
-              </View>
+              {isLoadingCredentialsStatus ? (
+                <View style={styles.loadingStatusContainer}>
+                  <ActivityIndicator size="small" color="#0EA5E9" />
+                  <Text style={[styles.loadingStatusText, { color: '#0EA5E9' }]}>
+                    Verificando Credenciales...
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={[
+                    styles.statusLabel, 
+                    { color: credentialsStatus === 'invalid' ? '#EF4444' : '#0EA5E9' }
+                  ]}>
+                    Credenciales Hacienda
+                  </Text>
+                  <View style={styles.statusIndicator}>
+                    <View style={[
+                      styles.statusDot,
+                      { backgroundColor: credentialsStatus === 'invalid' ? '#EF4444' : '#0EA5E9' }
+                    ]} />
+                    <Text style={[
+                      styles.statusText,
+                      { 
+                        color: credentialsStatus === 'invalid' ? '#EF4444' : '#0EA5E9',
+                        backgroundColor: credentialsStatus === 'invalid' 
+                          ? 'rgba(239, 68, 68, 0.09)' 
+                          : 'rgba(14, 165, 233, 0.09)'
+                      }
+                    ]}>
+                      {credentialsStatus === 'invalid' ? 'Invalido' : 'OK'}
+                    </Text>
+                  </View>
+                </>
+              )}
             </View>
           </View>
 
@@ -515,6 +703,50 @@ const CompanyDetailsScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Modals */}
+      <EditCompanyModal
+        visible={showEditCompanyModal}
+        company={company}
+        onClose={() => setShowEditCompanyModal(false)}
+        onSave={handleCompanySaved}
+      />
+
+      <CertificateCredentialsModal
+        visible={showCertificateModal}
+        company={company}
+        onClose={() => setShowCertificateModal(false)}
+        onCredentialsUpdated={handleCertificateUpdated}
+      />
+
+      <HaciendaCredentialsModal
+        visible={showHaciendaCredentialsModal}
+        company={company}
+        onClose={() => setShowHaciendaCredentialsModal(false)}
+        onCredentialsUpdated={handleCredentialsUpdated}
+      />
+
+      <LogoEditorModal
+        visible={showLogoEditorModal}
+        company={company}
+        onClose={() => setShowLogoEditorModal(false)}
+        onSave={handleLogoSaved}
+      />
+
+      <PurchasesModuleModal
+        visible={showPurchasesModuleModal}
+        onClose={() => setShowPurchasesModuleModal(false)}
+        onSave={handlePurchasesSettingsSaved}
+      />
+
+      {isTestAccount && (
+        <RequestProductionAccessModal
+          visible={showProductionAccessModal}
+          company={company}
+          onClose={() => setShowProductionAccessModal(false)}
+          onCompletion={handleProductionAccessCompletion}
+        />
+      )}
     </Animated.View>
   );
 };
@@ -631,6 +863,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+    minHeight: 30,
   },
   statusLabel: {
     fontSize: 16,
@@ -650,8 +883,17 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: 'rgba(14, 165, 233, 0.1)',
     borderRadius: 8,
+    overflow: 'hidden',
+  },
+  loadingStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  loadingStatusText: {
+    fontSize: 14,
   },
   detailsSection: {
     borderRadius: 12,

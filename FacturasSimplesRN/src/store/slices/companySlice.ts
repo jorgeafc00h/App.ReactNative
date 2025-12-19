@@ -19,17 +19,21 @@ const initialState: CompanyState = {
 // Async thunks
 export const fetchCompanies = createAsyncThunk(
   'companies/fetchCompanies',
-  async (params: { refresh?: boolean } = {}, { rejectWithValue }) => {
+  async (params: { refresh?: boolean } = {}, { rejectWithValue, getState }) => {
     try {
-      // TODO: Implement actual API call
+      // TODO: Implement actual API call when backend is ready
       // const companiesService = getCompaniesService();
       // const companies = await companiesService.getCompanies();
       
-      // Return empty companies array - no sample data
-      const companies: Company[] = [];
+      // For now, companies are persisted by redux-persist
+      // Return current state companies (redux-persist handles storage)
+      const state = getState() as { companies: CompanyState };
+      const existingCompanies = state.companies.companies;
       
-      return companies;
+      console.log('CompanySlice: fetchCompanies returning companies:', existingCompanies.length);
+      return existingCompanies;
     } catch (error: any) {
+      console.error('CompanySlice: fetchCompanies error:', error);
       return rejectWithValue(error.message || 'Failed to fetch companies');
     }
   }
@@ -69,7 +73,7 @@ export const createCompany = createAsyncThunk(
         currentInvoiceNumber: 1,
         currentCCFNumber: 1,
         status: CompanyStatus.Active,
-        isDefault: false,
+        isDefault: false, // Will be set in the fulfilled reducer if it's the first company
         userId: 'user1', // TODO: Get from auth state
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -244,6 +248,42 @@ const companySlice = createSlice({
     resetCompanies: (state) => {
       Object.assign(state, initialState);
     },
+    
+    // Initialize default company selection (for app startup)
+    initializeDefaultCompany: (state) => {
+      console.log('CompanySlice: initializeDefaultCompany called', {
+        selectedCompanyId: state.selectedCompanyId,
+        companiesLength: state.companies.length,
+        currentCompany: state.currentCompany?.id
+      });
+      
+      // Set default company if none selected and companies exist
+      if (!state.selectedCompanyId && state.companies.length > 0) {
+        // First try to find a company marked as default
+        let defaultCompany = state.companies.find(c => c.isDefault);
+        
+        console.log('CompanySlice: Found default company?', !!defaultCompany);
+        
+        // If no default company, use the first company
+        if (!defaultCompany) {
+          defaultCompany = state.companies[0];
+          console.log('CompanySlice: Using first company as default:', defaultCompany?.nombreComercial);
+        }
+        
+        if (defaultCompany) {
+          state.selectedCompanyId = defaultCompany.id;
+          state.currentCompany = defaultCompany;
+          console.log('CompanySlice: Default company selected:', defaultCompany.nombreComercial, 'ID:', defaultCompany.id);
+        } else {
+          console.error('CompanySlice: No companies available to select!');
+        }
+      } else {
+        console.log('CompanySlice: Conditions not met for default selection', {
+          hasSelectedId: !!state.selectedCompanyId,
+          hasCompanies: state.companies.length > 0
+        });
+      }
+    },
   },
   extraReducers: (builder) => {
     // Fetch companies
@@ -257,12 +297,21 @@ const companySlice = createSlice({
         state.companies = action.payload;
         
         // Set default company if none selected
-        if (!state.selectedCompanyId) {
-          const defaultCompany = action.payload.find(c => c.isDefault);
-          if (defaultCompany) {
-            state.selectedCompanyId = defaultCompany.id;
-            state.currentCompany = defaultCompany;
+        if (!state.selectedCompanyId && action.payload.length > 0) {
+          // First try to find a company marked as default
+          let defaultCompany = action.payload.find(c => c.isDefault);
+          
+          // If no default company, use the first company
+          if (!defaultCompany) {
+            defaultCompany = action.payload[0];
+            console.log('CompanySlice: No default company found, selecting first company:', defaultCompany.nombreComercial);
+          } else {
+            console.log('CompanySlice: Using default company:', defaultCompany.nombreComercial);
           }
+          
+          state.selectedCompanyId = defaultCompany.id;
+          state.currentCompany = defaultCompany;
+          console.log('CompanySlice: Selected company set to:', defaultCompany.nombreComercial);
         }
       })
       .addCase(fetchCompanies.rejected, (state, action) => {
@@ -301,9 +350,20 @@ const companySlice = createSlice({
       })
       .addCase(createCompany.fulfilled, (state, action) => {
         state.loading = false;
-        state.companies.push(action.payload);
-        state.currentCompany = action.payload;
-        state.selectedCompanyId = action.payload.id;
+        
+        // If this is the first company, mark it as default
+        const isFirstCompany = state.companies.length === 0;
+        const newCompany = { ...action.payload };
+        
+        if (isFirstCompany) {
+          newCompany.isDefault = true;
+          console.log('CompanySlice: Created first company, marking as default:', newCompany.nombreComercial);
+        }
+        
+        state.companies.push(newCompany);
+        state.currentCompany = newCompany;
+        state.selectedCompanyId = newCompany.id;
+        console.log('CompanySlice: Company created and selected:', newCompany.nombreComercial);
       })
       .addCase(createCompany.rejected, (state, action) => {
         state.loading = false;
@@ -393,6 +453,7 @@ export const {
   setSelectedCompany,
   updateCompanyLocal,
   resetCompanies,
+  initializeDefaultCompany,
 } = companySlice.actions;
 
 export default companySlice.reducer;

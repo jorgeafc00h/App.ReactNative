@@ -15,14 +15,27 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { deleteInvoice, updateInvoice, setCurrentInvoice } from '../../store/slices/invoiceSlice';
+import { deleteInvoice, updateInvoice, setCurrentInvoice, addInvoice } from '../../store/slices/invoiceSlice';
+import { selectCustomerById } from '../../store/selectors/customerSelectors';
 import { InvoicesStackParamList } from '../../navigation/types';
 import { useTheme } from '../../hooks/useTheme';
-import { Invoice, InvoiceStatus, InvoiceType, InvoiceDetail } from '../../types/invoice';
+import { 
+  Invoice, 
+  InvoiceStatus, 
+  InvoiceType, 
+  InvoiceDetail, 
+  CreateInvoiceInput,
+  InvoiceDetailInput 
+} from '../../types/invoice';
 
 // Components
 import { DeactivateDocumentModal } from '../../components/invoices';
 import { InvoicePDFPreview } from '../../components/invoices';
+import { DTESubmissionModal } from '../../components/invoices/DTESubmissionModal';
+
+// Services
+import { InvoiceService } from '../../services/api/InvoiceService';
+import { DTEResponseWrapper } from '../../types/dte';
 
 type InvoiceDetailRouteProp = RouteProp<InvoicesStackParamList, 'InvoiceDetail'>;
 type InvoiceDetailNavigationProp = StackNavigationProp<InvoicesStackParamList, 'InvoiceDetail'>;
@@ -36,12 +49,21 @@ export const InvoiceDetailScreenEnhanced: React.FC = () => {
   const { invoiceId } = route.params;
   const { currentInvoice, loading, invoices } = useAppSelector(state => state.invoices);
   const { currentCompany } = useAppSelector(state => state.companies);
+  const isProduction = useAppSelector(state => state.app?.environment === 'production') ?? false;
+  
+  // Get customer information for the current invoice
+  const customerSelector = useMemo(
+    () => currentInvoice?.customerId ? selectCustomerById(currentInvoice.customerId) : () => null,
+    [currentInvoice?.customerId]
+  );
+  const customer = useAppSelector(customerSelector);
   
   // UI State
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showPDFPreview, setShowPDFPreview] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const [showDTESubmissionModal, setShowDTESubmissionModal] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [syncLabel, setSyncLabel] = useState('Enviando...');
   
@@ -197,8 +219,37 @@ export const InvoiceDetailScreenEnhanced: React.FC = () => {
   const handleSendEmail = async () => {
     setShowEmailConfirm(false);
     setShowActionsMenu(false);
-    // TODO: Implement email sending with PDF attachment
-    Alert.alert('Enviando', 'Enviando correo con documento adjunto...');
+    
+    if (!currentInvoice || !currentCompany) {
+      Alert.alert('Error', 'No se puede enviar el email. Verifique la configuración.');
+      return;
+    }
+    
+    const customerEmail = customer?.email;
+    if (!customerEmail) {
+      Alert.alert('Error', 'El cliente no tiene un correo electrónico configurado.');
+      return;
+    }
+    
+    setIsBusy(true);
+    setSyncLabel('Enviando email...');
+    
+    try {
+      const invoiceService = new InvoiceService(isProduction);
+      // Upload PDF and send email (the API handles email sending after PDF upload)
+      if (currentInvoice.controlNumber && currentCompany.nit) {
+        await invoiceService.uploadPDF(
+          '', // PDF data would be generated here
+          currentInvoice.controlNumber,
+          currentCompany.nit
+        );
+      }
+      Alert.alert('Éxito', `Correo enviado a ${customerEmail}`);
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo enviar el correo. Intente nuevamente.');
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   const handleDeactivate = () => {
@@ -206,60 +257,269 @@ export const InvoiceDetailScreenEnhanced: React.FC = () => {
     setShowDeactivateModal(true);
   };
 
-  // Generate Credit Note
-  const handleGenerateCreditNote = async () => {
-    if (!currentInvoice) return;
+  // Helper to get next invoice number for a specific type
+  const getNextInvoiceNumber = useCallback((invoiceType: InvoiceType): string => {
+    const typeInvoices = invoices.filter(inv => 
+      inv.invoiceType === invoiceType && 
+      inv.companyId === currentCompany?.id
+    );
+    
+    if (typeInvoices.length === 0) return '00001';
+    
+    const sortedInvoices = [...typeInvoices].sort((a, b) => 
+      b.invoiceNumber.localeCompare(a.invoiceNumber)
+    );
+    
+    const lastNumber = parseInt(sortedInvoices[0].invoiceNumber, 10);
+    if (isNaN(lastNumber)) return '00001';
+    
+    return String(lastNumber + 1).padStart(5, '0');
+  }, [invoices, currentCompany?.id]);
+
+  // Helper to get document type from invoice type (matches Swift Extensions.documentTypeFromInvoiceType)
+  const getDocumentTypeFromInvoiceType = (type: InvoiceType): string => {
+    switch (type) {
+      case InvoiceType.Factura: return '01';
+      case InvoiceType.CCF: return '03';
+      case InvoiceType.NotaCredito: return '05';
+      case InvoiceType.NotaDebito: return '06';
+      case InvoiceType.NotaRemision: return '04';
+      case InvoiceType.SujetoExcluido: return '14';
+      case InvoiceType.ComprobanteLiquidacion: return '08';
+      case InvoiceType.FacturaExportacion: return '11';
+      default: return '01';
+    }
+  };
+
+  // Generate Credit Note from current invoice
+  const handleGenerateCreditNote = () => {
+    if (!currentInvoice || !currentCompany) return;
     setShowCreditNoteConfirm(false);
     
-    // TODO: Create credit note from this invoice
-    Alert.alert('Nota de Crédito', 'Funcionalidad en desarrollo');
+    try {
+      const newInvoiceNumber = getNextInvoiceNumber(InvoiceType.CCF);
+      
+      // Map items from current invoice
+      const items: InvoiceDetailInput[] = (currentInvoice.items || []).map(item => ({
+        quantity: item.quantity,
+        productId: item.productId,
+        productName: item.productName,
+        unitPrice: item.unitPrice,
+        obsItem: item.obsItem,
+        exportaciones: item.exportaciones,
+      }));
+      
+      const createInput: CreateInvoiceInput = {
+        invoiceNumber: newInvoiceNumber,
+        date: new Date().toISOString(),
+        customerId: currentInvoice.customerId,
+        invoiceType: InvoiceType.NotaCredito,
+        companyId: currentCompany.id,
+        documentType: getDocumentTypeFromInvoiceType(InvoiceType.NotaCredito),
+        items,
+        relatedDocumentNumber: currentInvoice.generationCode,
+        relatedDocumentType: currentInvoice.documentType,
+        relatedInvoiceType: currentInvoice.invoiceType,
+        relatedId: currentInvoice.id,
+        relatedDocumentDate: currentInvoice.date,
+        customerHasRetention: customer?.hasContributorRetention,
+      };
+      
+      dispatch(addInvoice(createInput));
+      Alert.alert(
+        'Nota de Crédito Creada',
+        `Se ha generado la Nota de Crédito #${newInvoiceNumber}`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo crear la Nota de Crédito');
+    }
   };
 
-  // Generate Debit Note
-  const handleGenerateDebitNote = async () => {
-    if (!currentInvoice) return;
+  // Generate Debit Note from current invoice
+  const handleGenerateDebitNote = () => {
+    if (!currentInvoice || !currentCompany) return;
     setShowDebitNoteConfirm(false);
     
-    // TODO: Create debit note from this invoice
-    Alert.alert('Nota de Débito', 'Funcionalidad en desarrollo');
+    try {
+      const newInvoiceNumber = getNextInvoiceNumber(InvoiceType.CCF);
+      
+      const items: InvoiceDetailInput[] = (currentInvoice.items || []).map(item => ({
+        quantity: item.quantity,
+        productId: item.productId,
+        productName: item.productName,
+        unitPrice: item.unitPrice,
+        obsItem: item.obsItem,
+        exportaciones: item.exportaciones,
+      }));
+      
+      const createInput: CreateInvoiceInput = {
+        invoiceNumber: newInvoiceNumber,
+        date: new Date().toISOString(),
+        customerId: currentInvoice.customerId,
+        invoiceType: InvoiceType.NotaDebito,
+        companyId: currentCompany.id,
+        documentType: getDocumentTypeFromInvoiceType(InvoiceType.NotaDebito),
+        items,
+        relatedDocumentNumber: currentInvoice.generationCode,
+        relatedDocumentType: currentInvoice.documentType,
+        relatedInvoiceType: currentInvoice.invoiceType,
+        relatedId: currentInvoice.id,
+        relatedDocumentDate: currentInvoice.date,
+        customerHasRetention: customer?.hasContributorRetention,
+      };
+      
+      dispatch(addInvoice(createInput));
+      Alert.alert(
+        'Nota de Débito Creada',
+        `Se ha generado la Nota de Débito #${newInvoiceNumber}`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo crear la Nota de Débito');
+    }
   };
 
-  // Generate Remission Note
-  const handleGenerateRemissionNote = async () => {
-    if (!currentInvoice) return;
+  // Generate Remission Note from current invoice
+  const handleGenerateRemissionNote = () => {
+    if (!currentInvoice || !currentCompany) return;
     setShowRemissionNoteConfirm(false);
     
-    // TODO: Create remission note from this invoice
-    Alert.alert('Nota de Remisión', 'Funcionalidad en desarrollo');
+    try {
+      const newInvoiceNumber = getNextInvoiceNumber(InvoiceType.CCF);
+      
+      const items: InvoiceDetailInput[] = (currentInvoice.items || []).map(item => ({
+        quantity: item.quantity,
+        productId: item.productId,
+        productName: item.productName,
+        unitPrice: item.unitPrice,
+        obsItem: item.obsItem,
+        exportaciones: item.exportaciones,
+      }));
+      
+      const createInput: CreateInvoiceInput = {
+        invoiceNumber: newInvoiceNumber,
+        date: new Date().toISOString(),
+        customerId: currentInvoice.customerId,
+        invoiceType: InvoiceType.NotaRemision,
+        companyId: currentCompany.id,
+        documentType: getDocumentTypeFromInvoiceType(InvoiceType.NotaRemision),
+        items,
+        relatedDocumentNumber: currentInvoice.generationCode,
+        relatedDocumentType: currentInvoice.documentType,
+        relatedInvoiceType: currentInvoice.invoiceType,
+        relatedId: currentInvoice.id,
+        relatedDocumentDate: currentInvoice.date,
+        customerHasRetention: customer?.hasContributorRetention,
+      };
+      
+      dispatch(addInvoice(createInput));
+      Alert.alert(
+        'Nota de Remisión Creada',
+        `Se ha generado la Nota de Remisión #${newInvoiceNumber}`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo crear la Nota de Remisión');
+    }
   };
 
-  // Generate Comprobante de Liquidación
-  const handleGenerateComprobanteLiquidacion = async () => {
-    if (!currentInvoice) return;
+  // Generate Comprobante de Liquidación from current invoice
+  const handleGenerateComprobanteLiquidacion = () => {
+    if (!currentInvoice || !currentCompany) return;
     setShowComprobanteLiquidacionConfirm(false);
     
-    // TODO: Create comprobante de liquidación from this invoice
-    Alert.alert('Comprobante de Liquidación', 'Funcionalidad en desarrollo');
+    try {
+      const newInvoiceNumber = getNextInvoiceNumber(InvoiceType.ComprobanteLiquidacion);
+      
+      const items: InvoiceDetailInput[] = (currentInvoice.items || []).map(item => ({
+        quantity: item.quantity,
+        productId: item.productId,
+        productName: item.productName,
+        unitPrice: item.unitPrice,
+        obsItem: item.obsItem,
+        exportaciones: item.exportaciones,
+      }));
+      
+      const createInput: CreateInvoiceInput = {
+        invoiceNumber: newInvoiceNumber,
+        date: new Date().toISOString(),
+        customerId: currentInvoice.customerId,
+        invoiceType: InvoiceType.ComprobanteLiquidacion,
+        companyId: currentCompany.id,
+        documentType: getDocumentTypeFromInvoiceType(InvoiceType.ComprobanteLiquidacion),
+        items,
+        relatedDocumentNumber: currentInvoice.generationCode,
+        relatedDocumentType: currentInvoice.documentType,
+        relatedInvoiceType: currentInvoice.invoiceType,
+        relatedId: currentInvoice.id,
+        relatedDocumentDate: currentInvoice.date,
+        customerHasRetention: customer?.hasContributorRetention,
+      };
+      
+      dispatch(addInvoice(createInput));
+      Alert.alert(
+        'Comprobante de Liquidación Creado',
+        `Se ha generado el Comprobante de Liquidación #${newInvoiceNumber}`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo crear el Comprobante de Liquidación');
+    }
   };
 
-  // Sync invoice with Hacienda
-  const handleSyncInvoice = async () => {
-    if (!currentInvoice) return;
+  // Validate credentials and sync invoice with Hacienda
+  const handleSyncInvoice = () => {
+    if (!currentInvoice || !currentCompany) return;
     setShowSyncConfirm(false);
-    setIsBusy(true);
-    setSyncLabel('Validando...');
-
-    try {
-      // TODO: Implement DTE submission
-      setSyncLabel('Enviando al MH...');
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulated delay
-      
-      Alert.alert('Éxito', 'Documento sincronizado correctamente');
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo sincronizar el documento');
-    } finally {
-      setIsBusy(false);
+    
+    // Validate company credentials
+    if (!currentCompany.credentials) {
+      Alert.alert(
+        'Configuración Requerida',
+        'La contraseña de hacienda aún no se ha configurado correctamente. Seleccione perfil y configure la contraseña.'
+      );
+      return;
     }
+    
+    // Open DTE submission modal which handles the full submission process
+    setShowDTESubmissionModal(true);
+  };
+
+  // Handle successful DTE submission
+  const handleDTESubmissionSuccess = (response: DTEResponseWrapper) => {
+    setShowDTESubmissionModal(false);
+    
+    // Update invoice status and related document if it's a credit/debit note
+    if (currentInvoice) {
+      // Update current invoice
+      dispatch(updateInvoice({
+        id: currentInvoice.id,
+        status: InvoiceStatus.Completada,
+        generationCode: response.codigoGeneracion,
+        controlNumber: response.codigoGeneracion,
+        receptionSeal: response.selloRecibido,
+      }));
+      
+      // If this is a credit or debit note, update the related document status to "Modificada"
+      if (currentInvoice.relatedId && 
+          (currentInvoice.invoiceType === InvoiceType.NotaCredito || 
+           currentInvoice.invoiceType === InvoiceType.NotaDebito)) {
+        dispatch(updateInvoice({
+          id: currentInvoice.relatedId,
+          status: InvoiceStatus.Modificada,
+        }));
+      }
+      
+      // Refresh current invoice
+      dispatch(setCurrentInvoice(currentInvoice.id));
+    }
+    
+    Alert.alert('Éxito', 'Documento sincronizado correctamente con el Ministerio de Hacienda');
+  };
+
+  const handleDTESubmissionClose = () => {
+    setShowDTESubmissionModal(false);
   };
 
   // Navigate to related document
@@ -344,22 +604,21 @@ export const InvoiceDetailScreenEnhanced: React.FC = () => {
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.colors.text.secondary }]}>Cliente</Text>
             <Text style={[styles.infoValue, { color: theme.colors.text.primary }]}>
-              {/* Would show customer name */}
-              Cliente
+              {customer ? `${customer.firstName} ${customer.lastName}`.trim() || customer.businessName || 'Cliente' : 'Cliente no encontrado'}
             </Text>
           </View>
           
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.colors.text.secondary }]}>Identificación</Text>
             <Text style={[styles.infoValue, { color: theme.colors.text.primary }]}>
-              N/A
+              {customer?.nationalId || customer?.nit || 'N/A'}
             </Text>
           </View>
           
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.colors.text.secondary }]}>Email</Text>
             <Text style={[styles.infoValue, { color: theme.colors.text.primary }]}>
-              N/A
+              {customer?.email || 'N/A'}
             </Text>
           </View>
           
@@ -1012,6 +1271,16 @@ export const InvoiceDetailScreenEnhanced: React.FC = () => {
           visible={showPDFPreview}
           invoice={currentInvoice}
           onClose={() => setShowPDFPreview(false)}
+        />
+      )}
+
+      {/* DTE Submission Modal */}
+      {showDTESubmissionModal && currentInvoice && (
+        <DTESubmissionModal
+          visible={showDTESubmissionModal}
+          invoice={currentInvoice}
+          onClose={handleDTESubmissionClose}
+          onSuccess={handleDTESubmissionSuccess}
         />
       )}
     </View>

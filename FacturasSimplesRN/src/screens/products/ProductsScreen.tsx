@@ -40,7 +40,7 @@ export const ProductsScreen: React.FC = () => {
 
   // Categories derived from products
   const categories = useMemo(() => {
-    const uniqueCategories = ['Todos', ...new Set(products.map(p => p.category || 'Sin categoría'))];
+    const uniqueCategories = ['Todos', ...new Set(products.map(p => p.categoryId || 'Sin categoría'))];
     return uniqueCategories;
   }, [products]);
 
@@ -48,20 +48,25 @@ export const ProductsScreen: React.FC = () => {
   const filteredProducts = useMemo(() => {
     let filtered = products;
 
+    // Filter by current company (CRITICAL - matches Swift implementation)
+    if (currentCompany?.id) {
+      filtered = filtered.filter(product => product.companyId === currentCompany.id);
+    }
+
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(product =>
-        product.name.toLowerCase().includes(query) ||
+        product.productName.toLowerCase().includes(query) ||
         product.description?.toLowerCase().includes(query) ||
-        product.code?.toLowerCase().includes(query)
+        product.productCode?.toLowerCase().includes(query)
       );
     }
 
     // Filter by category
     if (selectedCategory !== 'Todos') {
       filtered = filtered.filter(product => 
-        (product.category || 'Sin categoría') === selectedCategory
+        (product.categoryId || 'Sin categoría') === selectedCategory
       );
     }
 
@@ -69,9 +74,9 @@ export const ProductsScreen: React.FC = () => {
     return filtered.sort((a, b) => {
       switch (sortBy) {
         case 'name':
-          return a.name.localeCompare(b.name);
+          return a.productName.localeCompare(b.productName);
         case 'price':
-          return a.price - b.price;
+          return a.unitPrice - b.unitPrice;
         case 'date':
           return new Date(b.updatedAt || b.createdAt || '').getTime() - 
                  new Date(a.updatedAt || a.createdAt || '').getTime();
@@ -79,7 +84,7 @@ export const ProductsScreen: React.FC = () => {
           return 0;
       }
     });
-  }, [products, searchQuery, selectedCategory, sortBy]);
+  }, [products, searchQuery, selectedCategory, sortBy, currentCompany?.id]);
 
   // Handler functions
   const handleAddProduct = () => {
@@ -97,7 +102,7 @@ export const ProductsScreen: React.FC = () => {
   const handleDeleteProduct = (product: Product) => {
     Alert.alert(
       'Eliminar Producto',
-      `¿Está seguro que desea eliminar "${product.name}"?`,
+      `¿Está seguro que desea eliminar "${product.productName}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -132,11 +137,11 @@ export const ProductsScreen: React.FC = () => {
       <View style={styles.productHeader}>
         <View style={styles.productInfo}>
           <Text style={[styles.productName, { color: theme.colors.text.primary }]}>
-            {item.name}
+            {item.productName}
           </Text>
-          {item.code && (
+          {item.productCode && (
             <Text style={[styles.productCode, { color: theme.colors.text.secondary }]}>
-              {item.code}
+              {item.productCode}
             </Text>
           )}
         </View>
@@ -159,10 +164,10 @@ export const ProductsScreen: React.FC = () => {
       )}
 
       <View style={styles.productDetails}>
-        {item.category && (
+        {item.categoryId && (
           <View style={[styles.categoryBadge, { backgroundColor: theme.colors.primary + '20' }]}>
             <Text style={[styles.categoryBadgeText, { color: theme.colors.primary }]}>
-              {item.category}
+              {item.categoryId}
             </Text>
           </View>
         )}
@@ -171,19 +176,19 @@ export const ProductsScreen: React.FC = () => {
       <View style={styles.productFooter}>
         <View style={styles.priceContainer}>
           <Text style={[styles.price, { color: theme.colors.text.primary }]}>
-            {formatCurrency(item.price)}
+            {formatCurrency(item.unitPrice)}
           </Text>
-          {item.stockQuantity !== undefined && (
+          {item.stock !== undefined && (
             <Text style={[styles.stockLabel, { color: theme.colors.text.secondary }]}>
-              Stock: {item.isService ? '∞' : item.stockQuantity}
+              Stock: {item.stock}
             </Text>
           )}
         </View>
         
         <View style={styles.taxIndicator}>
-          {item.taxIncluded && (
+          {item.taxCategory && (
             <Text style={[styles.taxText, { color: theme.colors.success }]}>
-              IVA incluido
+              {item.taxCategory}
             </Text>
           )}
         </View>
@@ -193,7 +198,7 @@ export const ProductsScreen: React.FC = () => {
 
   const showProductActions = (product: Product) => {
     Alert.alert(
-      product.name,
+      product.productName,
       'Seleccione una acción',
       [
         { text: 'Ver detalles', onPress: () => handleViewProduct(product) },
@@ -248,7 +253,7 @@ export const ProductsScreen: React.FC = () => {
 
       {/* Search and Sort */}
       <View style={styles.searchContainer}>
-        <View style={[styles.searchBar, { backgroundColor: theme.colors.surface.primary, borderColor: theme.colors.border }]}>
+        <View style={[styles.searchBar, { backgroundColor: theme.colors.surface.primary, borderColor: theme.colors.border.light }]}>
           <Text style={[styles.searchIcon, { color: theme.colors.text.secondary }]}>🔍</Text>
           <TextInput
             placeholder="Buscar productos o servicios..."
@@ -259,7 +264,7 @@ export const ProductsScreen: React.FC = () => {
         </View>
         
         <TouchableOpacity 
-          style={[styles.sortButton, { backgroundColor: theme.colors.surface.primary, borderColor: theme.colors.border }]}
+          style={[styles.sortButton, { backgroundColor: theme.colors.surface.primary, borderColor: theme.colors.border.light }]}
           onPress={() => {
             Alert.alert(
               'Ordenar por',
@@ -290,7 +295,7 @@ export const ProductsScreen: React.FC = () => {
             style={[
               styles.categoryTab,
               selectedCategory === category && { backgroundColor: theme.colors.primary },
-              { borderColor: theme.colors.border }
+              { borderColor: theme.colors.border.light }
             ]}
             onPress={() => setSelectedCategory(category)}
           >
@@ -400,16 +405,20 @@ const styles = StyleSheet.create({
   },
   categoryContainer: {
     marginBottom: 20,
+    maxHeight: 50, // Fixed height to prevent weird vertical sizing
   },
   categoryContent: {
     paddingHorizontal: 20,
     gap: 12,
+    alignItems: 'center', // Center items vertically
   },
   categoryTab: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
+    height: 36, // Fixed height for consistent sizing
+    justifyContent: 'center', // Center text vertically
   },
   categoryText: {
     fontSize: 14,

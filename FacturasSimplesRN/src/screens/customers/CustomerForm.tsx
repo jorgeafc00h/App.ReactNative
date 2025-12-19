@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -7,17 +7,18 @@ import {
   TouchableOpacity, 
   Alert, 
   ScrollView,
-  Switch,
-  Modal
+  Switch
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { CustomersStackParamList } from '../../navigation/types';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { addCustomer, updateCustomer } from '../../store/slices/customerSlice';
+import { createCustomer, updateCustomerAsync, fetchCustomers } from '../../store/slices/customerSlice';
 import { selectCustomerById } from '../../store/selectors/customerSelectors';
 import { useTheme } from '../../hooks/useTheme';
 import { CustomerType, CustomerDocumentType } from '../../types/customer';
+import { LocationDropdowns, LocationData } from '../../components/LocationDropdowns';
+import { CatalogDropdown } from '../../components/CatalogDropdown';
+import { GovernmentCatalogId } from '../../types/catalog';
 
 type RouteProps = RouteProp<CustomersStackParamList, 'CustomerForm'>;
 
@@ -40,9 +41,11 @@ const CustomerForm: React.FC = () => {
   const [phone, setPhone] = useState(existing?.phone ?? '');
   const [email, setEmail] = useState(existing?.email ?? '');
   
-  // Address info
+  // Address info - includes both codes and descriptions for location
   const [departmentCode, setDepartmentCode] = useState(existing?.departmentCode ?? '');
+  const [department, setDepartment] = useState(existing?.department ?? '');
   const [municipalityCode, setMunicipalityCode] = useState(existing?.municipalityCode ?? '');
+  const [municipality, setMunicipality] = useState(existing?.municipality ?? '');
   const [address, setAddress] = useState(existing?.address ?? '');
   
   // Business info
@@ -57,14 +60,8 @@ const CustomerForm: React.FC = () => {
   // Export info
   const [hasExportInvoiceSettings, setHasExportInvoiceSettings] = useState(false);
   const [codPais, setCodPais] = useState('');
-  const [nombrePais, setNombrePais] = useState('');
   const [tipoPersona, setTipoPersona] = useState('');
   const [tipoDocumento, setTipoDocumento] = useState('');
-  
-  // UI state
-  const [showActivityPicker, setShowActivityPicker] = useState(false);
-  const [showDepartmentPicker, setShowDepartmentPicker] = useState(false);
-  const [showMunicipalityPicker, setShowMunicipalityPicker] = useState(false);
 
   useEffect(() => {
     if (existing) {
@@ -81,7 +78,9 @@ const CustomerForm: React.FC = () => {
       setHasContributorRetention(existing.hasContributorRetention);
       setAddress(existing.address || '');
       setDepartmentCode(existing.departmentCode || '');
+      setDepartment(existing.department || '');
       setMunicipalityCode(existing.municipalityCode || '');
+      setMunicipality(existing.municipality || '');
       setHasInvoiceSettings(existing.customerType === CustomerType.Business);
     }
   }, [existing]);
@@ -98,8 +97,14 @@ const CustomerForm: React.FC = () => {
     return true;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validate()) return;
+
+    // Ensure we have a company selected (like Swift's selectedCompanyId check)
+    if (!currentCompany?.id) {
+      Alert.alert('Error', 'No hay empresa seleccionada. Por favor seleccione una empresa primero.');
+      return;
+    }
 
     const customerData = {
       firstName,
@@ -110,7 +115,7 @@ const CustomerForm: React.FC = () => {
       phone,
       nit: nit || nationalId,
       customerType: hasInvoiceSettings ? CustomerType.Business : CustomerType.Individual,
-      companyId: currentCompany?.id || '',
+      companyId: currentCompany.id, // Link to current company (like Swift's companyOwnerId)
       businessName: hasInvoiceSettings ? company : undefined,
       nrc: hasInvoiceSettings ? nrc : undefined,
       codActividad: hasInvoiceSettings ? codActividad : undefined,
@@ -118,20 +123,47 @@ const CustomerForm: React.FC = () => {
       hasContributorRetention: hasInvoiceSettings ? hasContributorRetention : false,
       address,
       departmentCode,
+      department,
       municipalityCode,
+      municipality,
+      // Export information
+      codPais: hasExportInvoiceSettings ? codPais : undefined,
+      tipoPersona: hasExportInvoiceSettings ? tipoPersona : undefined,
+      tipoDocumento: hasExportInvoiceSettings ? tipoDocumento : undefined,
+      shouldSyncToCloud: !currentCompany.isTestAccount, // Like Swift: isProductionCompany
     };
 
-    if (mode === 'create') {
-      dispatch(addCustomer(customerData));
-      navigation.goBack();
-    } else if (mode === 'edit' && customerId) {
-      dispatch(
-        updateCustomer({
+    console.log('📝 Creating/updating customer with companyId:', currentCompany.id);
+
+    try {
+      if (mode === 'create') {
+        // Use async createCustomer and refresh list
+        await dispatch(createCustomer(customerData)).unwrap();
+        await dispatch(fetchCustomers({ refresh: true }));
+        console.log('✅ Customer created and list refreshed');
+        
+        Alert.alert(
+          'Éxito',
+          'Cliente creado correctamente',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else if (mode === 'edit' && customerId) {
+        // Use async updateCustomerAsync
+        await dispatch(updateCustomerAsync({
           id: customerId,
           ...customerData,
-        } as any)
-      );
-      navigation.goBack();
+        } as any)).unwrap();
+        console.log('✅ Customer updated');
+        
+        Alert.alert(
+          'Éxito',
+          'Cliente actualizado correctamente',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      }
+    } catch (error: any) {
+      console.error('❌ Error saving customer:', error);
+      Alert.alert('Error', error || 'No se pudo guardar el cliente');
     }
   };
 
@@ -207,25 +239,22 @@ const CustomerForm: React.FC = () => {
       <View style={[styles.section, { backgroundColor: theme.colors.surface.primary }]}>
         <Text style={[styles.sectionHeader, { color: theme.colors.text.primary }]}>Dirección</Text>
         
-        <TouchableOpacity 
-          style={[styles.picker, { borderColor: theme.colors.border.light }]}
-          onPress={() => setShowDepartmentPicker(true)}
-        >
-          <Text style={[styles.pickerText, { color: theme.colors.text.primary }]}>
-            {departmentCode ? `Departamento: ${departmentCode}` : 'Departamento'}
-          </Text>
-          <Ionicons name="chevron-down" size={20} color={theme.colors.text.secondary} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.picker, { borderColor: theme.colors.border.light }]}
-          onPress={() => setShowMunicipalityPicker(true)}
-        >
-          <Text style={[styles.pickerText, { color: theme.colors.text.primary }]}>
-            {municipalityCode ? `Municipio: ${municipalityCode}` : 'Municipio'}
-          </Text>
-          <Ionicons name="chevron-down" size={20} color={theme.colors.text.secondary} />
-        </TouchableOpacity>
+        {/* Location Dropdowns - Department and Municipality with cascade logic */}
+        {/* Matches Swift's .onChange(of: departamentoCode) behavior */}
+        <LocationDropdowns
+          value={{
+            departamentoCode: departmentCode,
+            departamento: department,
+            municipioCode: municipalityCode,
+            municipio: municipality,
+          }}
+          onChange={(locationData: LocationData) => {
+            setDepartmentCode(locationData.departamentoCode);
+            setDepartment(locationData.departamento);
+            setMunicipalityCode(locationData.municipioCode);
+            setMunicipality(locationData.municipio);
+          }}
+        />
         
         <View style={styles.field}>
           <TextInput 
@@ -288,15 +317,16 @@ const CustomerForm: React.FC = () => {
               />
             </View>
 
-            <TouchableOpacity 
-              style={[styles.picker, { borderColor: theme.colors.border.light }]}
-              onPress={() => setShowActivityPicker(true)}
-            >
-              <Text style={[styles.pickerText, { color: theme.colors.text.primary }]}>
-                {descActividad || 'Actividad Económica'}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color={theme.colors.text.secondary} />
-            </TouchableOpacity>
+            <CatalogDropdown
+              catalogId={GovernmentCatalogId.ECONOMIC_ACTIVITIES}
+              label="Actividad Económica"
+              placeholder="Seleccionar Actividad Económica"
+              value={codActividad}
+              onSelect={(option) => {
+                setCodActividad(option?.code || '');
+                setDescActividad(option?.description || '');
+              }}
+            />
 
             <View style={styles.toggleContainer}>
               <Text style={[styles.toggleLabel, { color: theme.colors.text.primary }]}>
@@ -337,36 +367,35 @@ const CustomerForm: React.FC = () => {
 
         {hasExportInvoiceSettings && (
           <>
-            <TouchableOpacity style={[styles.picker, { borderColor: theme.colors.border.light }]}>
-              <Text style={[styles.pickerText, { color: theme.colors.text.primary }]}>
-                {nombrePais || 'Seleccionar País'}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color={theme.colors.text.secondary} />
-            </TouchableOpacity>
+            <CatalogDropdown
+              catalogId={GovernmentCatalogId.COUNTRIES}
+              label="País"
+              placeholder="Seleccionar País"
+              value={codPais}
+              onSelect={(option) => {
+                setCodPais(option?.code || '');
+              }}
+            />
 
-            <TouchableOpacity style={[styles.picker, { borderColor: theme.colors.border.light }]}>
-              <Text style={[styles.pickerText, { color: theme.colors.text.primary }]}>
-                {tipoPersona || 'Tipo de Persona'}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color={theme.colors.text.secondary} />
-            </TouchableOpacity>
+            <CatalogDropdown
+              catalogId={GovernmentCatalogId.DOCUMENT_TYPES}
+              label="Tipo de Persona"
+              placeholder="Seleccionar Tipo de Persona"
+              value={tipoPersona}
+              onSelect={(option) => {
+                setTipoPersona(option?.code || '');
+              }}
+            />
 
-            <TouchableOpacity style={[styles.picker, { borderColor: theme.colors.border.light }]}>
-              <Text style={[styles.pickerText, { color: theme.colors.text.primary }]}>
-                {tipoDocumento || 'Tipo de Documento'}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color={theme.colors.text.secondary} />
-            </TouchableOpacity>
-
-            <View style={styles.field}>
-              <TextInput 
-                style={[styles.input, { color: theme.colors.text.primary, borderColor: theme.colors.border.light }]}
-                placeholder="Descripción Actividad Económica"
-                placeholderTextColor={theme.colors.text.secondary}
-                value={descActividad}
-                onChangeText={setDescActividad}
-              />
-            </View>
+            <CatalogDropdown
+              catalogId={GovernmentCatalogId.DOCUMENT_TYPES}
+              label="Tipo de Documento"
+              placeholder="Seleccionar Tipo de Documento"
+              value={tipoDocumento}
+              onSelect={(option) => {
+                setTipoDocumento(option?.code || '');
+              }}
+            />
           </>
         )}
       </View>
@@ -378,17 +407,6 @@ const CustomerForm: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Modals */}
-      <Modal visible={showActivityPicker} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modalContainer, { backgroundColor: theme.colors.background.primary }]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: theme.colors.text.primary }]}>Actividad Económica</Text>
-            <TouchableOpacity onPress={() => setShowActivityPicker(false)}>
-              <Text style={[styles.modalCancel, { color: theme.colors.primary }]}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 };
@@ -472,27 +490,6 @@ const styles = StyleSheet.create({
     color: '#fff', 
     fontSize: 16,
     fontWeight: '600' 
-  },
-  modalContainer: {
-    flex: 1,
-    paddingTop: 60,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  modalCancel: {
-    fontSize: 16,
-    fontWeight: '500',
   },
 });
 

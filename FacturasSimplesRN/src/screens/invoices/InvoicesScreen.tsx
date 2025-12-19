@@ -9,6 +9,7 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
@@ -56,6 +57,7 @@ export const InvoicesScreen: React.FC = () => {
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   // Search scopes for the horizontal picker
   const searchScopes = Object.values(InvoiceSearchScope);
@@ -396,12 +398,27 @@ export const InvoicesScreen: React.FC = () => {
         <Text style={[styles.title, { color: theme.colors.text.primary }]}>
           Facturas
         </Text>
-        <TouchableOpacity 
-          style={[styles.addButton, { backgroundColor: theme.colors.primary }]} 
-          onPress={handleAddInvoice}
-        >
-          <Text style={styles.addButtonText}>+ Nueva</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={[styles.filterToggleButton, { 
+              backgroundColor: showFilters ? theme.colors.primary : theme.colors.surface.secondary,
+              borderColor: theme.colors.border.light
+            }]} 
+            onPress={() => setShowFilters(!showFilters)}
+          >
+            <Ionicons 
+              name="options" 
+              size={18} 
+              color={showFilters ? 'white' : theme.colors.text.primary} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.addButton, { backgroundColor: theme.colors.primary }]} 
+            onPress={handleAddInvoice}
+          >
+            <Text style={styles.addButtonText}>+ Nueva</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search Bar */}
@@ -489,35 +506,37 @@ export const InvoicesScreen: React.FC = () => {
       )}
 
       {/* Filter Tabs */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterContainer}
-        contentContainerStyle={styles.filterContent}
-      >
-        {filterTabs.map((filter) => (
-          <TouchableOpacity
-            key={filter}
-            style={[
-              styles.filterTab,
-              { 
-                borderColor: theme.colors.border.light,
-                backgroundColor: selectedFilter === filter ? theme.colors.primary : 'transparent',
-              }
-            ]}
-            onPress={() => setSelectedFilter(filter)}
-          >
-            <Text
+      {showFilters && (
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterContainer}
+          contentContainerStyle={styles.filterContent}
+        >
+          {filterTabs.map((filter) => (
+            <TouchableOpacity
+              key={filter}
               style={[
-                styles.filterText,
-                { color: selectedFilter === filter ? 'white' : theme.colors.text.secondary }
+                styles.filterTab,
+                { 
+                  borderColor: theme.colors.border.light,
+                  backgroundColor: selectedFilter === filter ? theme.colors.primary : 'transparent',
+                }
               ]}
+              onPress={() => setSelectedFilter(filter)}
             >
-              {filter}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+              <Text
+                style={[
+                  styles.filterText,
+                  { color: selectedFilter === filter ? 'white' : theme.colors.text.secondary }
+                ]}
+              >
+                {filter}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Invoices List */}
       <ScrollView 
@@ -583,6 +602,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  filterToggleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   addButton: {
     paddingHorizontal: 16,

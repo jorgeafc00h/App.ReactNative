@@ -66,8 +66,21 @@ export const CatalogDropdown: React.FC<CatalogDropdownProps> = ({
   
   const selectedOption = useMemo(() => {
     if (!value || !catalog) return null;
+    
+    // When filterBy is specified, search within filtered options first
+    // This is crucial for cascade dropdowns like municipalities where
+    // multiple options may have the same code but different parent values
+    if (filterBy) {
+      const filtered = catalog.options.filter(option => {
+        const fieldValue = (option as any)[filterBy.field];
+        return fieldValue === filterBy.value;
+      });
+      return filtered.find(option => option.code === value) || null;
+    }
+    
+    // For non-filtered catalogs, search all options
     return catalog.options.find(option => option.code === value) || null;
-  }, [value, catalog]);
+  }, [value, catalog, filterBy]);
 
   const handleSelect = (option: CatalogOption) => {
     onSelect(option);

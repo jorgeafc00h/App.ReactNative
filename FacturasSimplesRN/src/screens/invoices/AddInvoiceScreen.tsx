@@ -1,5 +1,5 @@
-// Enhanced Add Invoice Screen with multi-step form and full service integration
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+// Add Invoice Screen - matches SwiftUI AddInvoiceView functionality
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,8 @@ import {
   TextInput,
   Alert,
   Platform,
-  ActivityIndicator,
-  Modal,
   KeyboardAvoidingView,
-  Animated,
+  Switch,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
@@ -21,60 +19,28 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { useTheme } from '../../hooks/useTheme';
 import { useAppDispatch, useAppSelector } from '../../store';
-import {
-  addInvoice,
-  setCurrentInvoice,
-  updateInvoice,
-  setInvoiceStatus,
-} from '../../store/slices/invoiceSlice';
-import {
-  selectCustomers,
-  selectCurrentCustomer,
-} from '../../store/selectors/customerSelectors';
-import { 
-  selectProducts,
-} from '../../store/selectors/productSelectors';
-import {
-  selectCurrentCompany,
-} from '../../store/selectors/companySelectors';
-
-// Services
-import { InvoiceService } from '../../services/api/InvoiceService';
-import { getCertificateService } from '../../services/security/CertificateService';
-import { getPDFGenerationService } from '../../services/pdf/PDFGenerationService';
+import { addInvoice, setCurrentInvoice } from '../../store/slices/invoiceSlice';
+import { addProduct } from '../../store/slices/productSlice';
+import { selectAllCustomers, selectCurrentCustomer } from '../../store/selectors/customerSelectors';
+import { selectAllProducts } from '../../store/selectors/productSelectors';
+import { selectCurrentCompany } from '../../store/selectors/companySelectors';
 
 import {
   InvoiceType,
-  InvoiceStatus,
   CreateInvoiceInput,
   InvoiceDetailInput,
-  Invoice,
 } from '../../types/invoice';
 import { Customer } from '../../types/customer';
-import { Product } from '../../types/product';
-import { Company } from '../../types/company';
+import { Product, ProductStatus, UnitOfMeasure, TaxCategory } from '../../types/product';
 import { API_CONFIG } from '../../config/api';
-import { DTE_Base, ServiceCredentials } from '../../types/dte';
 
 import { CustomerPicker } from '../../components/invoices/CustomerPicker';
 import { ProductSelector } from '../../components/invoices/ProductSelector';
-import { InvoiceCalculator } from '../../components/invoices/InvoiceCalculator';
 import { ProductDetailEditor } from '../../components/invoices/ProductDetailEditor';
-import { CreateCustomerModal } from '../../components/customers/CreateCustomerModal';
-import { InvoicePreviewModal } from '../../components/invoices/InvoicePreviewModal';
-import { DTESubmissionModal } from '../../components/invoices/DTESubmissionModal';
 
 type AddInvoiceNavigation = StackNavigationProp<any, 'AddInvoice'>;
 
-// Multi-step form navigation
-enum FormStep {
-  BASIC_INFO = 'basic_info',
-  CUSTOMER_SELECTION = 'customer_selection',
-  PRODUCT_SELECTION = 'product_selection',
-  INVOICE_DETAILS = 'invoice_details',
-  REVIEW_AND_SUBMIT = 'review_and_submit'
-}
-
+// Matches Swift AddInvoiceViewModel structure
 interface AddInvoiceFormData {
   invoiceNumber: string;
   date: Date;
@@ -87,24 +53,13 @@ interface AddInvoiceFormData {
   observaciones: string;
   receptor: string;
   receptorDocu: string;
-  // Additional tracking
-  isDraft: boolean;
 }
 
+// Matches Swift addProductSection state
 interface ProductFormData {
   productName: string;
   unitPrice: number;
   hasTax: boolean;
-}
-
-interface SubmissionState {
-  isSubmitting: boolean;
-  isGeneratingPDF: boolean;
-  isValidatingCertificate: boolean;
-  isDTESubmission: boolean;
-  submissionProgress: number;
-  submissionStatus: string;
-  error: string | null;
 }
 
 export const AddInvoiceScreen: React.FC = () => {
@@ -113,25 +68,11 @@ export const AddInvoiceScreen: React.FC = () => {
   const dispatch = useAppDispatch();
 
   // Redux selectors
-  const customers = useAppSelector(selectCustomers);
-  const currentCustomer = useAppSelector(selectCurrentCustomer);
-  const products = useAppSelector(selectProducts);
+  const customers = useAppSelector(selectAllCustomers);
+  const products = useAppSelector(selectAllProducts);
   const currentCompany = useAppSelector(selectCurrentCompany);
 
-  // Services
-  const invoiceService = useMemo(() => new InvoiceService(false), []); // TODO: Use production flag from settings
-  const certificateService = useMemo(() => getCertificateService(false), []);
-  const pdfService = useMemo(() => getPDFGenerationService(false), []);
-
-  // Refs
-  const scrollViewRef = useRef<ScrollView>(null);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-
-  // Multi-step form state
-  const [currentStep, setCurrentStep] = useState<FormStep>(FormStep.BASIC_INFO);
-  const [completedSteps, setCompletedSteps] = useState<Set<FormStep>>(new Set());
-  
-  // Form state
+  // Form state - matches Swift ViewModel
   const [formData, setFormData] = useState<AddInvoiceFormData>({
     invoiceNumber: '',
     date: new Date(),
@@ -143,56 +84,23 @@ export const AddInvoiceScreen: React.FC = () => {
     observaciones: '',
     receptor: '',
     receptorDocu: '',
-    isDraft: false,
   });
 
-  // Submission state
-  const [submissionState, setSubmissionState] = useState<SubmissionState>({
-    isSubmitting: false,
-    isGeneratingPDF: false,
-    isValidatingCertificate: false,
-    isDTESubmission: false,
-    submissionProgress: 0,
-    submissionStatus: '',
-    error: null,
-  });
-
-  // UI state
+  // UI state - matches Swift ViewModel
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
-  const [showCreateCustomer, setShowCreateCustomer] = useState(false);
   const [showProductSelector, setShowProductSelector] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showAddProductForm, setShowAddProductForm] = useState(false);
-  const [showInvoicePreview, setShowInvoicePreview] = useState(false);
-  const [showDTESubmission, setShowDTESubmission] = useState(false);
-  const [createdInvoice, setCreatedInvoice] = useState<Invoice | null>(null);
+  const [showAddProductSection, setShowAddProductSection] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Product form state (matches Swift addProductSection)
+  // Product form state - matches Swift addProductSection
   const [productForm, setProductForm] = useState<ProductFormData>({
     productName: '',
     unitPrice: 0,
     hasTax: true,
   });
 
-  // Step titles for navigation
-  const stepTitles = {
-    [FormStep.BASIC_INFO]: 'Información Básica',
-    [FormStep.CUSTOMER_SELECTION]: 'Selección de Cliente',
-    [FormStep.PRODUCT_SELECTION]: 'Productos',
-    [FormStep.INVOICE_DETAILS]: 'Detalles de Factura',
-    [FormStep.REVIEW_AND_SUBMIT]: 'Revisar y Enviar',
-  };
-
-  // Step validation
-  const stepValidation = {
-    [FormStep.BASIC_INFO]: () => formData.invoiceNumber.trim() !== '',
-    [FormStep.CUSTOMER_SELECTION]: () => formData.customer !== null,
-    [FormStep.PRODUCT_SELECTION]: () => formData.items.length > 0,
-    [FormStep.INVOICE_DETAILS]: () => true, // Optional fields
-    [FormStep.REVIEW_AND_SUBMIT]: () => isFormValid,
-  };
-
-  // Available invoice types (matches Swift)
+  // Available invoice types - matches Swift invoiceTypes
   const invoiceTypes = [
     InvoiceType.Factura,
     InvoiceType.CCF,
@@ -200,165 +108,83 @@ export const AddInvoiceScreen: React.FC = () => {
     InvoiceType.FacturaExportacion,
   ];
 
-  // Step order for navigation
-  const stepOrder = [
-    FormStep.BASIC_INFO,
-    FormStep.CUSTOMER_SELECTION,
-    FormStep.PRODUCT_SELECTION,
-    FormStep.INVOICE_DETAILS,
-    FormStep.REVIEW_AND_SUBMIT,
-  ];
+  // Tax factor constant
+  const TAX_FACTOR = API_CONFIG.includedTax || 1.13;
 
-  const currentStepIndex = stepOrder.indexOf(currentStep);
-  const isFirstStep = currentStepIndex === 0;
-  const isLastStep = currentStepIndex === stepOrder.length - 1;
+  // Dark cyan color to match Swift InvoiceDetailView button style
+  const DARK_CYAN = '#008B8B';
 
-  // Step navigation functions
-  const goToStep = useCallback((step: FormStep) => {
-    // Animate step transition
-    Animated.sequence([
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
+  // Generate next invoice number - matches Swift getNextInvoiceNumber
+  const generateNextInvoiceNumber = useCallback((invoiceType: InvoiceType) => {
+    if (!currentCompany?.id) return '00001';
 
-    setCurrentStep(step);
-    scrollViewRef.current?.scrollTo({ x: 0, y: 0, animated: true });
-  }, [fadeAnim]);
-
-  const goToNextStep = useCallback(() => {
-    if (!isLastStep) {
-      const nextStep = stepOrder[currentStepIndex + 1];
-      if (stepValidation[currentStep]()) {
-        setCompletedSteps(prev => new Set([...prev, currentStep]));
-        goToStep(nextStep);
-      } else {
-        Alert.alert('Error', 'Por favor complete todos los campos requeridos en este paso.');
-      }
-    }
-  }, [currentStep, currentStepIndex, isLastStep, stepOrder, stepValidation, goToStep]);
-
-  const goToPreviousStep = useCallback(() => {
-    if (!isFirstStep) {
-      const previousStep = stepOrder[currentStepIndex - 1];
-      goToStep(previousStep);
-    }
-  }, [currentStepIndex, isFirstStep, stepOrder, goToStep]);
-
-  // Generate next invoice number (matches Swift functionality)
-  const generateNextInvoiceNumber = useCallback(() => {
-    if (!currentCompany) return '00001';
+    // Get all invoices for the current company and document type
+    // This matches Swift's FetchDescriptor with predicate filtering
+    const allInvoices = useAppSelector(state => state.invoices.invoices);
     
-    // This would be replaced with actual logic to get the next number from existing invoices
-    // For now, using a simple timestamp-based approach
-    const timestamp = Date.now().toString().slice(-5);
-    return timestamp.padStart(5, '0');
-  }, [currentCompany]);
+    // Convert invoice type to document type (matches Swift Extensions.documentTypeFromInvoiceType + TipoDocumento enum)
+    const getDocumentType = (type: InvoiceType): string => {
+      switch (type) {
+        case InvoiceType.Factura: return '01';
+        case InvoiceType.CCF: return '03';  
+        case InvoiceType.NotaCredito: return '05';
+        case InvoiceType.SujetoExcluido: return '14';
+        case InvoiceType.NotaDebito: return '06';
+        case InvoiceType.NotaRemision: return '04';
+        case InvoiceType.ComprobanteLiquidacion: return '08';
+        case InvoiceType.FacturaExportacion: return '11';
+        default: return '01';
+      }
+    };
 
-  // Initialize form on mount
+    const documentType = getDocumentType(invoiceType);
+    
+    // Filter invoices by company and document type (matches Swift predicate)
+    const companyInvoices = allInvoices.filter(invoice => 
+      invoice.companyId === currentCompany.id && 
+      invoice.documentType === documentType
+    );
+
+    // Sort by invoice number (descending) to get latest (matches Swift sortBy)
+    const sortedInvoices = companyInvoices
+      .filter(invoice => invoice.invoiceNumber && !isNaN(parseInt(invoice.invoiceNumber)))
+      .sort((a, b) => parseInt(b.invoiceNumber) - parseInt(a.invoiceNumber));
+
+    // Get next number (matches Swift logic)
+    if (sortedInvoices.length > 0) {
+      const latestNumber = parseInt(sortedInvoices[0].invoiceNumber);
+      const nextNumber = latestNumber + 1;
+      return nextNumber.toString().padStart(5, '0'); // Format as 5-digit zero-padded string
+    } else {
+      return '00001'; // First invoice for this company and document type
+    }
+  }, [currentCompany?.id]);
+
+  // Initialize form on mount - matches Swift onAppear
   useEffect(() => {
-    const nextNumber = generateNextInvoiceNumber();
+    const nextNumber = generateNextInvoiceNumber(formData.invoiceType);
     setFormData(prev => ({
       ...prev,
       invoiceNumber: nextNumber,
     }));
-  }, [generateNextInvoiceNumber]);
+  }, [generateNextInvoiceNumber, formData.invoiceType]);
 
-  // Auto-save draft functionality
+  // Update invoice number when invoice type changes (matches Swift behavior)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (formData.invoiceNumber || formData.items.length > 0) {
-        // Auto-save logic here - could save to AsyncStorage
-        console.log('Auto-saving draft...');
-      }
-    }, 5000); // Save every 5 seconds
+    const nextNumber = generateNextInvoiceNumber(formData.invoiceType);
+    setFormData(prev => ({
+      ...prev,
+      invoiceNumber: nextNumber,
+    }));
+  }, [formData.invoiceType, generateNextInvoiceNumber]);
 
-    return () => clearTimeout(timer);
-  }, [formData]);
-
-  // Certificate validation
-  const validateCertificate = useCallback(async (): Promise<boolean> => {
-    if (!currentCompany) return false;
-
-    setSubmissionState(prev => ({ ...prev, isValidatingCertificate: true, submissionStatus: 'Validando certificado...' }));
-
-    try {
-      const hasValidCertificate = await certificateService.hasValidCertificate(currentCompany);
-      
-      if (!hasValidCertificate) {
-        Alert.alert(
-          'Certificado Requerido',
-          'Es necesario configurar un certificado digital válido para enviar facturas al Ministerio de Hacienda.\n\n¿Desea configurar el certificado ahora?',
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            { 
-              text: 'Configurar', 
-              onPress: () => navigation.navigate('CertificateSettings')
-            }
-          ]
-        );
-        return false;
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Certificate validation error:', error);
-      Alert.alert('Error', 'Error validando certificado. Intente nuevamente.');
-      return false;
-    } finally {
-      setSubmissionState(prev => ({ ...prev, isValidatingCertificate: false }));
-    }
-  }, [currentCompany, certificateService, navigation]);
-
-  // Tax calculations (matches Swift ViewModel calculations)
-  const taxCalculations = useMemo(() => {
-    const taxFactor = API_CONFIG.includedTax; // 1.13
-    
-    // Calculate totals for all items
-    const totalAmount = formData.items.reduce((sum, item) => {
-      const itemTotal = item.quantity * (item.unitPrice || 0);
-      return sum + itemTotal;
-    }, 0);
-
-    const tax = totalAmount > 0 ? totalAmount - (totalAmount / taxFactor) : 0;
-    const subTotal = totalAmount - tax;
-    const reteRenta = totalAmount > 0 ? totalAmount * 0.10 : 0;
-    
-    let totalPagar = totalAmount;
-    if (formData.invoiceType === InvoiceType.SujetoExcluido) {
-      totalPagar = totalAmount - reteRenta;
-    }
-
-    const hasRetention = formData.customer?.hasContributorRetention || false;
-    const ivaRete1 = hasRetention ? (totalAmount / taxFactor) * 0.01 : 0;
-
-    return {
-      totalAmount: Math.round(totalAmount * 100) / 100,
-      tax: Math.round(tax * 100) / 100,
-      subTotal: Math.round(subTotal * 100) / 100,
-      reteRenta: Math.round(reteRenta * 100) / 100,
-      totalPagar: Math.round(totalPagar * 100) / 100,
-      ivaRete1: Math.round(ivaRete1 * 100) / 100,
-      totalWithoutTax: Math.round((totalAmount / taxFactor) * 100) / 100,
-      isCCF: formData.invoiceType === InvoiceType.CCF,
-    };
-  }, [formData.items, formData.invoiceType, formData.customer]);
-
-  // Product form calculations (matches Swift ViewModel)
+  // Product tax calculations - matches Swift productTax, productWithoutTax, productUnitPricePlusTax
   const productCalculations = useMemo(() => {
     const { unitPrice, hasTax } = productForm;
-    const taxFactor = API_CONFIG.includedTax; // 1.13
     
     const tax = hasTax 
-      ? unitPrice - (unitPrice / taxFactor)
-      : (unitPrice * taxFactor) - unitPrice;
+      ? unitPrice - (unitPrice / TAX_FACTOR)
+      : (unitPrice * TAX_FACTOR) - unitPrice;
     
     const priceWithoutTax = unitPrice - (hasTax ? tax : 0);
     const pricePlusTax = unitPrice + (hasTax ? 0 : tax);
@@ -368,16 +194,40 @@ export const AddInvoiceScreen: React.FC = () => {
       priceWithoutTax: Math.round(priceWithoutTax * 100) / 100,
       pricePlusTax: Math.round(pricePlusTax * 100) / 100,
     };
-  }, [productForm.unitPrice, productForm.hasTax]);
+  }, [productForm.unitPrice, productForm.hasTax, TAX_FACTOR]);
 
-  // Form validation (matches Swift disableAddInvoice)
+  // Invoice totals calculations - matches Swift totalAmount, subTotal, reteRenta, totalPagar
+  const invoiceCalculations = useMemo(() => {
+    const totalAmount = formData.items.reduce((sum, item) => {
+      return sum + (item.quantity * (item.unitPrice || 0));
+    }, 0);
+
+    const tax = totalAmount > 0 ? totalAmount - (totalAmount / TAX_FACTOR) : 0;
+    const subTotal = totalAmount - tax;
+    const reteRenta = totalAmount > 0 ? totalAmount * 0.10 : 0;
+    
+    let totalPagar = totalAmount;
+    if (formData.invoiceType === InvoiceType.SujetoExcluido) {
+      totalPagar = totalAmount - reteRenta;
+    }
+
+    return {
+      totalAmount: Math.round(totalAmount * 100) / 100,
+      tax: Math.round(tax * 100) / 100,
+      subTotal: Math.round(subTotal * 100) / 100,
+      reteRenta: Math.round(reteRenta * 100) / 100,
+      totalPagar: Math.round(totalPagar * 100) / 100,
+    };
+  }, [formData.items, formData.invoiceType, TAX_FACTOR]);
+
+  // Form validation - matches Swift disableAddInvoice
   const isFormValid = useMemo(() => {
     return formData.invoiceNumber.trim() !== '' && 
            formData.items.length > 0 && 
            formData.customer !== null;
   }, [formData.invoiceNumber, formData.items.length, formData.customer]);
 
-  // Product form validation (matches Swift isDisabledAddProduct)
+  // Product form validation - matches Swift isDisabledAddProduct
   const isProductFormValid = useMemo(() => {
     return productForm.productName.trim() !== '' && productForm.unitPrice > 0;
   }, [productForm.productName, productForm.unitPrice]);
@@ -389,18 +239,7 @@ export const AddInvoiceScreen: React.FC = () => {
       customer,
     }));
     setShowCustomerPicker(false);
-    
-    // Auto-advance to next step if we're on customer selection
-    if (currentStep === FormStep.CUSTOMER_SELECTION) {
-      setTimeout(() => goToNextStep(), 300);
-    }
-  }, [currentStep, goToNextStep]);
-
-  // Handle new customer creation
-  const handleCustomerCreate = useCallback((customer: Customer) => {
-    handleCustomerSelect(customer);
-    setShowCreateCustomer(false);
-  }, [handleCustomerSelect]);
+  }, []);
 
   // Handle product selection from existing products
   const handleProductSelect = useCallback((selectedProducts: Product[]) => {
@@ -417,24 +256,41 @@ export const AddInvoiceScreen: React.FC = () => {
       items: [...prev.items, ...newItems],
     }));
     setShowProductSelector(false);
-    
-    // Mark product selection step as completed if we have items
-    if (newItems.length > 0 && currentStep === FormStep.PRODUCT_SELECTION) {
-      setCompletedSteps(prev => new Set([...prev, FormStep.PRODUCT_SELECTION]));
-    }
-  }, [currentStep]);
+  }, []);
 
-  // Add new product (matches Swift AddNewProduct)
+  // Add new product - matches Swift AddNewProduct
   const handleAddNewProduct = useCallback(() => {
-    if (!isProductFormValid) return;
+    if (!isProductFormValid || !currentCompany?.id) return;
 
+    // Use price with tax if not already included - matches Swift logic
     const finalPrice = productForm.hasTax 
       ? productForm.unitPrice 
       : productCalculations.pricePlusTax;
 
+    // Create a proper Product object and save it to the store
+    const productId = `product_${Date.now()}`;
+    const timestamp = new Date().toISOString();
+    
+    const newProduct: Product = {
+      id: productId,
+      productName: productForm.productName,
+      unitPrice: finalPrice,
+      unitOfMeasure: UnitOfMeasure.UNIDAD, // Default unit
+      taxCategory: productForm.hasTax ? TaxCategory.GRAVADO : TaxCategory.EXENTO,
+      status: ProductStatus.Active,
+      companyId: currentCompany.id, // Link to current company
+      isActive: true,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    // Add product to the store so it appears in Products section
+    dispatch(addProduct(newProduct));
+
+    // Create invoice item using the real product ID
     const newItem: InvoiceDetailInput = {
       quantity: 1,
-      productId: `temp_${Date.now()}`, // Temporary ID for new products
+      productId: productId,
       productName: productForm.productName,
       unitPrice: finalPrice,
       obsItem: '',
@@ -445,16 +301,16 @@ export const AddInvoiceScreen: React.FC = () => {
       items: [...prev.items, newItem],
     }));
 
-    // Reset product form
+    // Reset product form and hide section - matches Swift
     setProductForm({
       productName: '',
       unitPrice: 0,
       hasTax: true,
     });
-    setShowAddProductForm(false);
-  }, [productForm, productCalculations, isProductFormValid]);
+    setShowAddProductSection(false);
+  }, [productForm, productCalculations, isProductFormValid, currentCompany?.id, dispatch]);
 
-  // Update item quantity/price
+  // Update item - for ProductDetailEditor
   const handleUpdateItem = useCallback((index: number, updates: Partial<InvoiceDetailInput>) => {
     setFormData(prev => ({
       ...prev,
@@ -464,7 +320,7 @@ export const AddInvoiceScreen: React.FC = () => {
     }));
   }, []);
 
-  // Remove item
+  // Remove item - matches Swift deleteProduct
   const handleRemoveItem = useCallback((index: number) => {
     setFormData(prev => ({
       ...prev,
@@ -472,192 +328,14 @@ export const AddInvoiceScreen: React.FC = () => {
     }));
   }, []);
 
-  // Save as draft
-  const handleSaveDraft = useCallback(async () => {
-    if (!currentCompany) {
-      Alert.alert('Error', 'No hay empresa seleccionada');
-      return;
-    }
-
-    try {
-      const draftInput: CreateInvoiceInput = {
-        invoiceNumber: formData.invoiceNumber,
-        date: formData.date.toISOString(),
-        invoiceType: formData.invoiceType,
-        customerId: formData.customer?.id,
-        companyId: currentCompany.id,
-        items: formData.items,
-        nombEntrega: formData.nombEntrega,
-        docuEntrega: formData.docuEntrega,
-        observaciones: formData.observaciones,
-        receptor: formData.receptor,
-        receptorDocu: formData.receptorDocu,
-        customerHasRetention: formData.customer?.hasContributorRetention,
-      };
-
-      // Create draft invoice
-      const resultAction = dispatch(addInvoice(draftInput));
-      
-      if (addInvoice.fulfilled.match(resultAction)) {
-        Alert.alert('Guardado', 'Borrador guardado exitosamente');
-        navigation.goBack();
-      }
-    } catch (error) {
-      console.error('Error saving draft:', error);
-      Alert.alert('Error', 'Error guardando borrador');
-    }
-  }, [formData, currentCompany, dispatch, navigation]);
-
-  // Generate PDF preview
-  const handleGeneratePDFPreview = useCallback(async (invoice: Invoice) => {
-    if (!currentCompany) return;
-
-    setSubmissionState(prev => ({ ...prev, isGeneratingPDF: true, submissionStatus: 'Generando vista previa...' }));
-
-    try {
-      const pdfResult = await pdfService.previewPDF(invoice, currentCompany);
-      
-      if (pdfResult.success) {
-        setShowInvoicePreview(true);
-      } else {
-        Alert.alert('Error', pdfResult.message || 'Error generando vista previa');
-      }
-    } catch (error) {
-      console.error('PDF preview error:', error);
-      Alert.alert('Error', 'Error generando vista previa del PDF');
-    } finally {
-      setSubmissionState(prev => ({ ...prev, isGeneratingPDF: false }));
-    }
-  }, [currentCompany, pdfService]);
-
-  // Submit DTE to government
-  const handleDTESubmission = useCallback(async (invoice: Invoice) => {
-    if (!currentCompany) return;
-
-    // Validate certificate first
-    const certificateValid = await validateCertificate();
-    if (!certificateValid) return;
-
-    setSubmissionState(prev => ({ 
-      ...prev, 
-      isDTESubmission: true, 
-      submissionProgress: 0,
-      submissionStatus: 'Preparando envío...'
-    }));
-
-    try {
-      // Update status to synchronizing
-      dispatch(setInvoiceStatus({ id: invoice.id, status: InvoiceStatus.Sincronizando }));
-      
-      // Get certificate password
-      const certificatePassword = await certificateService.getCertificatePassword(currentCompany.nit);
-      if (!certificatePassword) {
-        throw new Error('No se encontró la contraseña del certificado');
-      }
-
-      // Prepare service credentials
-      const credentials: ServiceCredentials = {
-        key: certificatePassword,
-        user: currentCompany.nit,
-        credential: certificatePassword, // This should be the MH password
-        invoiceNumber: invoice.invoiceNumber,
-      };
-
-      setSubmissionState(prev => ({ 
-        ...prev, 
-        submissionProgress: 30,
-        submissionStatus: 'Enviando DTE...'
-      }));
-
-      // Create DTE structure (simplified - in real app this would be more complex)
-      const dte: DTE_Base = {
-        identificacion: {
-          version: 1,
-          ambiente: '00', // Test environment
-          tipoDte: formData.invoiceType.toString(),
-          numeroControl: invoice.controlNumber || '',
-          codigoGeneracion: invoice.generationCode || '',
-          tipoModelo: 1,
-          tipoOperacion: 1,
-          fecEmi: invoice.date,
-          horEmi: new Date().toTimeString().slice(0, 8),
-          tipoMoneda: 'USD'
-        },
-        // Add other required DTE fields based on invoice data
-      };
-
-      // Submit DTE
-      const dteResponse = await invoiceService.submitDTE(dte, credentials);
-      
-      setSubmissionState(prev => ({ 
-        ...prev, 
-        submissionProgress: 70,
-        submissionStatus: 'Generando PDF...'
-      }));
-
-      // Generate and upload PDF
-      const pdfResult = await pdfService.generateAndSavePDF(invoice, currentCompany);
-      
-      if (pdfResult.success && pdfResult.pdfData) {
-        await invoiceService.uploadPDF(
-          pdfResult.pdfData,
-          invoice.controlNumber || invoice.invoiceNumber,
-          currentCompany.nit
-        );
-      }
-
-      setSubmissionState(prev => ({ 
-        ...prev, 
-        submissionProgress: 100,
-        submissionStatus: 'Completado'
-      }));
-
-      // Update invoice with DTE response data
-      dispatch(updateInvoice({
-        id: invoice.id,
-        status: InvoiceStatus.Completada,
-        generationCode: dteResponse.codigoGeneracion,
-        controlNumber: dteResponse.numeroControl,
-        receptionSeal: dteResponse.selloRecepcion,
-      }));
-
-      Alert.alert(
-        'Éxito',
-        'Factura enviada exitosamente al Ministerio de Hacienda',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
-
-    } catch (error) {
-      console.error('DTE submission error:', error);
-      
-      // Update status back to new
-      dispatch(setInvoiceStatus({ id: invoice.id, status: InvoiceStatus.Nueva }));
-      
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-      Alert.alert('Error', `Error enviando factura: ${errorMessage}`);
-      
-      setSubmissionState(prev => ({ 
-        ...prev, 
-        error: errorMessage
-      }));
-    } finally {
-      setSubmissionState(prev => ({ 
-        ...prev, 
-        isDTESubmission: false,
-        submissionProgress: 0
-      }));
-      setShowDTESubmission(false);
-    }
-  }, [currentCompany, validateCertificate, dispatch, certificateService, invoiceService, pdfService, formData.invoiceType, navigation]);
-
-  // Handle invoice creation and submission workflow
+  // Create invoice - matches Swift addInvoice
   const handleCreateInvoice = useCallback(async () => {
     if (!isFormValid || !currentCompany || !formData.customer) {
       Alert.alert('Error', 'Por favor complete todos los campos requeridos');
       return;
     }
 
-    setSubmissionState(prev => ({ ...prev, isSubmitting: true, submissionStatus: 'Creando factura...' }));
+    setIsSubmitting(true);
 
     try {
       const invoiceInput: CreateInvoiceInput = {
@@ -675,37 +353,31 @@ export const AddInvoiceScreen: React.FC = () => {
         customerHasRetention: formData.customer.hasContributorRetention,
       };
 
-      // Create invoice via Redux
-      const resultAction = dispatch(addInvoice(invoiceInput));
-      const newInvoice = (resultAction as any).payload;
+      // Create invoice via Redux - matches Swift modelContext.insert(invoice)
+      const result = dispatch(addInvoice(invoiceInput));
       
-      if (newInvoice) {
-        setCreatedInvoice(newInvoice);
-        dispatch(setCurrentInvoice(newInvoice.id));
+      // The addInvoice action returns the created invoice in payload
+      const createdInvoice = (result as any).payload;
+      
+      if (createdInvoice && createdInvoice.id) {
+        dispatch(setCurrentInvoice(createdInvoice.id));
         
-        // Show options for next steps
         Alert.alert(
           'Factura Creada',
-          '¿Qué desea hacer ahora?',
-          [
-            { text: 'Ver Vista Previa', onPress: () => handleGeneratePDFPreview(newInvoice) },
-            { text: 'Enviar a Hacienda', onPress: () => {
-              setShowDTESubmission(true);
-              handleDTESubmission(newInvoice);
-            }},
-            { text: 'Finalizar', onPress: () => navigation.goBack() },
-          ]
+          `Factura ${formData.invoiceNumber} creada exitosamente`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
       } else {
-        Alert.alert('Error', 'No se pudo crear la factura');
+        throw new Error('No se pudo crear la factura');
       }
     } catch (error) {
       console.error('Error creating invoice:', error);
-      Alert.alert('Error', 'Ocurrió un error al crear la factura');
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      Alert.alert('Error', `No se pudo crear la factura: ${errorMessage}`);
     } finally {
-      setSubmissionState(prev => ({ ...prev, isSubmitting: false }));
+      setIsSubmitting(false);
     }
-  }, [formData, isFormValid, currentCompany, dispatch, navigation, handleGeneratePDFPreview, handleDTESubmission]);
+  }, [formData, isFormValid, currentCompany, dispatch, navigation]);
 
   // Handle date change
   const handleDateChange = useCallback((_: any, selectedDate?: Date) => {
@@ -715,149 +387,22 @@ export const AddInvoiceScreen: React.FC = () => {
     }
   }, []);
 
-  // Render step indicator
-  const renderStepIndicator = () => (
-    <View style={styles.stepIndicator}>
-      {stepOrder.map((step, index) => {
-        const isActive = step === currentStep;
-        const isCompleted = completedSteps.has(step);
-        
-        return (
-          <View key={step} style={styles.stepIndicatorContainer}>
-            <TouchableOpacity
-              style={[
-                styles.stepCircle,
-                {
-                  backgroundColor: isCompleted 
-                    ? theme.colors.success 
-                    : isActive 
-                    ? theme.colors.primary 
-                    : theme.colors.border.light
-                }
-              ]}
-              onPress={() => goToStep(step)}
-              disabled={!isCompleted && !isActive}
-            >
-              <Text style={[
-                styles.stepNumber,
-                {
-                  color: isCompleted || isActive 
-                    ? '#FFFFFF' 
-                    : theme.colors.text.secondary
-                }
-              ]}>
-                {isCompleted ? '✓' : index + 1}
-              </Text>
-            </TouchableOpacity>
-            
-            <Text style={[
-              styles.stepLabel,
-              {
-                color: isActive 
-                  ? theme.colors.primary 
-                  : theme.colors.text.secondary
-              }
-            ]}>
-              {stepTitles[step]}
-            </Text>
-            
-            {index < stepOrder.length - 1 && (
-              <View style={[
-                styles.stepConnector,
-                {
-                  backgroundColor: isCompleted 
-                    ? theme.colors.success 
-                    : theme.colors.border.light
-                }
-              ]} />
-            )}
-          </View>
-        );
-      })}
-    </View>
-  );
-
-  // Render step navigation buttons
-  const renderStepNavigation = () => {
-    const canProceed = stepValidation[currentStep]();
-    
-    return (
-      <View style={styles.stepNavigation}>
-        {!isFirstStep && (
-          <TouchableOpacity
-            style={[styles.navButton, styles.backButton, { borderColor: theme.colors.primary }]}
-            onPress={goToPreviousStep}
-          >
-            <Text style={[styles.backButtonText, { color: theme.colors.primary }]}>
-              ← Anterior
-            </Text>
-          </TouchableOpacity>
-        )}
-        
-        <View style={{ flex: 1 }} />
-        
-        {!isLastStep ? (
-          <TouchableOpacity
-            style={[
-              styles.navButton,
-              styles.nextButton,
-              { 
-                backgroundColor: canProceed ? theme.colors.primary : theme.colors.border.light 
-              }
-            ]}
-            onPress={goToNextStep}
-            disabled={!canProceed}
-          >
-            <Text style={[
-              styles.nextButtonText,
-              { 
-                color: canProceed ? '#FFFFFF' : theme.colors.text.secondary 
-              }
-            ]}>
-              Siguiente →
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[
-              styles.navButton,
-              styles.finishButton,
-              { 
-                backgroundColor: canProceed ? theme.colors.success : theme.colors.border.light 
-              }
-            ]}
-            onPress={handleCreateInvoice}
-            disabled={!canProceed || submissionState.isSubmitting}
-          >
-            <Text style={[
-              styles.finishButtonText,
-              { 
-                color: canProceed ? '#FFFFFF' : theme.colors.text.secondary 
-              }
-            ]}>
-              {submissionState.isSubmitting ? 'Creando...' : 'Crear Factura'}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
+  // Format currency
+  const formatCurrency = (amount: number): string => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(amount);
   };
 
-  // Render current step content
-  const renderStepContent = () => {
-    switch (currentStep) {
-      case FormStep.BASIC_INFO:
-        return renderBasicInfoStep();
-      case FormStep.CUSTOMER_SELECTION:
-        return renderCustomerSelectionStep();
-      case FormStep.PRODUCT_SELECTION:
-        return renderProductSelectionStep();
-      case FormStep.INVOICE_DETAILS:
-        return renderInvoiceDetailsStep();
-      case FormStep.REVIEW_AND_SUBMIT:
-        return renderReviewStep();
-      default:
-        return null;
+  // Get invoice type display name
+  const getInvoiceTypeName = (type: InvoiceType): string => {
+    switch (type) {
+      case InvoiceType.Factura: return 'Factura';
+      case InvoiceType.CCF: return 'CCF';
+      case InvoiceType.SujetoExcluido: return 'Sujeto Excluido';
+      case InvoiceType.FacturaExportacion: return 'Exportación';
+      default: return String(type);
     }
   };
 
@@ -869,87 +414,38 @@ export const AddInvoiceScreen: React.FC = () => {
     >
       <StatusBar style={theme.isDark ? 'light' : 'dark'} />
 
-      {/* Enhanced Header with Step Indicator */}
+      {/* Header - matches Swift toolbar */}
       <View style={[styles.header, { borderBottomColor: theme.colors.border.light }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={[styles.cancelButton, { color: theme.colors.primary }]}>Cancelar</Text>
         </TouchableOpacity>
         
-        <View style={styles.headerCenter}>
-          <Text style={[styles.title, { color: theme.colors.text.primary }]}>Nueva Factura</Text>
-          <Text style={[styles.stepTitle, { color: theme.colors.text.secondary }]}>
-            {stepTitles[currentStep]}
-          </Text>
-        </View>
+        <Text style={[styles.title, { color: theme.colors.text.primary }]}>Nueva Factura</Text>
         
         <TouchableOpacity 
-          onPress={handleSaveDraft}
-          style={[styles.headerButton, styles.draftButton]}
+          onPress={handleCreateInvoice}
+          disabled={!isFormValid || isSubmitting}
         >
-          <Text style={[styles.draftButtonText, { color: theme.colors.text.secondary }]}>
-            Guardar Borrador
+          <Text style={[
+            styles.saveButton, 
+            { 
+              color: isFormValid && !isSubmitting 
+                ? theme.colors.primary 
+                : theme.colors.text.secondary 
+            }
+          ]}>
+            {isSubmitting ? 'Guardando...' : 'Guardar'}
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Step Indicator */}
-      {renderStepIndicator()}
-
-      {/* Main Content */}
       <ScrollView 
-        ref={scrollViewRef}
-        style={styles.scrollView} 
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Animated.View
-          style={[
-            styles.stepContent,
-            {
-              opacity: fadeAnim,
-            }
-          ]}
-        >
-          {renderStepContent()}
-        </Animated.View>
-      </ScrollView>
-
-      {/* Step Navigation */}
-      {renderStepNavigation()}
-      
-      {/* Loading Overlay */}
-      {(submissionState.isSubmitting || submissionState.isGeneratingPDF || submissionState.isValidatingCertificate) && (
-        <View style={styles.loadingOverlay}>
-          <View style={[styles.loadingContent, { backgroundColor: theme.colors.surface.primary }]}>
-            <ActivityIndicator 
-              size="large" 
-              color={theme.colors.primary} 
-              style={styles.loadingSpinner}
-            />
-            <Text style={[styles.loadingText, { color: theme.colors.text.primary }]}>
-              {submissionState.submissionStatus}
-            </Text>
-            {submissionState.submissionProgress > 0 && (
-              <View style={[styles.progressBar, { backgroundColor: theme.colors.border.light }]}>
-                <View 
-                  style={[
-                    styles.progressFill,
-                    { 
-                      backgroundColor: theme.colors.primary,
-                      width: `${submissionState.submissionProgress}%`
-                    }
-                  ]} 
-                />
-              </View>
-            )}
-          </View>
-        </View>
-      )}
-      
-      {/* Modals and Pickers - keeping existing ones but organized */}
-        
-        {/* Customer Section */}
+        {/* Customer Section - matches Swift CustomerSection */}
         <View style={[styles.section, { backgroundColor: theme.colors.surface.primary }]}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>Cliente</Text>
           
@@ -959,31 +455,42 @@ export const AddInvoiceScreen: React.FC = () => {
           >
             {formData.customer ? (
               <View style={styles.customerInfo}>
-                <Text style={[styles.customerName, { color: theme.colors.text.primary }]}>
-                  {formData.customer.firstName} {formData.customer.lastName}
-                </Text>
-                <Text style={[styles.customerDocument, { color: theme.colors.text.secondary }]}>
-                  {formData.customer.nationalId}
-                </Text>
+                <View>
+                  <Text style={[styles.customerName, { color: theme.colors.text.primary }]}>
+                    {formData.customer.firstName} {formData.customer.lastName}
+                  </Text>
+                  <Text style={[styles.customerDocument, { color: theme.colors.text.secondary }]}>
+                    {formData.customer.nationalId}
+                  </Text>
+                </View>
+                <Text style={[styles.changeText, { color: theme.colors.primary }]}>Cambiar</Text>
               </View>
             ) : (
               <View style={styles.searchButton}>
-                <Text style={[styles.searchText, { color: theme.colors.primary }]}>🔍 Buscar Cliente</Text>
+                <Text style={[styles.searchText, { color: theme.colors.primary }]}>
+                  🔍 Buscar Cliente
+                </Text>
               </View>
             )}
           </TouchableOpacity>
         </View>
 
-        {/* Invoice Data Section */}
+        {/* Invoice Data Section - matches Swift InvoiceDataSection */}
         <View style={[styles.section, { backgroundColor: theme.colors.surface.primary }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>Datos de Factura</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>
+            Datos de Factura
+          </Text>
           
+          {/* Invoice Number */}
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.colors.text.secondary }]}>Número de Factura</Text>
+            <Text style={[styles.label, { color: theme.colors.text.secondary }]}>
+              Número de Factura
+            </Text>
             <TextInput
               style={[styles.textInput, { 
                 color: theme.colors.text.primary,
-                borderColor: theme.colors.border.light 
+                borderColor: theme.colors.border.light,
+                backgroundColor: theme.colors.background.secondary,
               }]}
               value={formData.invoiceNumber}
               onChangeText={(text) => setFormData(prev => ({ ...prev, invoiceNumber: text }))}
@@ -993,6 +500,7 @@ export const AddInvoiceScreen: React.FC = () => {
             />
           </View>
 
+          {/* Date */}
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: theme.colors.text.secondary }]}>Fecha</Text>
             <TouchableOpacity 
@@ -1005,27 +513,33 @@ export const AddInvoiceScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
+          {/* Invoice Type - matches Swift Picker */}
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.colors.text.secondary }]}>Tipo Documento</Text>
-            <View style={[styles.pickerContainer, { borderColor: theme.colors.border.light }]}>
+            <Text style={[styles.label, { color: theme.colors.text.secondary }]}>
+              Tipo Documento
+            </Text>
+            <View style={[styles.typeContainer, { borderColor: theme.colors.border.light }]}>
               {invoiceTypes.map((type) => (
                 <TouchableOpacity
                   key={type}
                   style={[
-                    styles.pickerOption,
-                    formData.invoiceType === type && { backgroundColor: theme.colors.primary + '20' }
+                    styles.typeOption,
+                    formData.invoiceType === type && { 
+                      backgroundColor: theme.colors.primary + '20',
+                      borderColor: theme.colors.primary,
+                    }
                   ]}
                   onPress={() => setFormData(prev => ({ ...prev, invoiceType: type }))}
                 >
                   <Text style={[
-                    styles.pickerText,
+                    styles.typeText,
                     { 
                       color: formData.invoiceType === type 
                         ? theme.colors.primary 
                         : theme.colors.text.primary 
                     }
                   ]}>
-                    {type === InvoiceType.CCF ? 'CCF' : type}
+                    {getInvoiceTypeName(type)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1033,7 +547,7 @@ export const AddInvoiceScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Export Section (only for FacturaExportacion) */}
+        {/* Export Section - matches Swift FacturaExportacionSection */}
         {formData.invoiceType === InvoiceType.FacturaExportacion && (
           <View style={[styles.section, { backgroundColor: theme.colors.surface.primary }]}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>
@@ -1041,11 +555,14 @@ export const AddInvoiceScreen: React.FC = () => {
             </Text>
             
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.text.secondary }]}>Nombre Entrega</Text>
+              <Text style={[styles.label, { color: theme.colors.text.secondary }]}>
+                Nombre Entrega
+              </Text>
               <TextInput
                 style={[styles.textInput, { 
                   color: theme.colors.text.primary,
-                  borderColor: theme.colors.border.light 
+                  borderColor: theme.colors.border.light,
+                  backgroundColor: theme.colors.background.secondary,
                 }]}
                 value={formData.nombEntrega}
                 onChangeText={(text) => setFormData(prev => ({ ...prev, nombEntrega: text }))}
@@ -1055,11 +572,14 @@ export const AddInvoiceScreen: React.FC = () => {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.text.secondary }]}>Documento Entrega</Text>
+              <Text style={[styles.label, { color: theme.colors.text.secondary }]}>
+                Documento Entrega
+              </Text>
               <TextInput
                 style={[styles.textInput, { 
                   color: theme.colors.text.primary,
-                  borderColor: theme.colors.border.light 
+                  borderColor: theme.colors.border.light,
+                  backgroundColor: theme.colors.background.secondary,
                 }]}
                 value={formData.docuEntrega}
                 onChangeText={(text) => setFormData(prev => ({ ...prev, docuEntrega: text }))}
@@ -1070,13 +590,14 @@ export const AddInvoiceScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Products Section */}
+        {/* Products Section - matches Swift ProductDetailsSection */}
         <View style={[styles.section, { backgroundColor: theme.colors.surface.primary }]}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>Productos</Text>
           
+          {/* Product List */}
           {formData.items.map((item, index) => (
             <ProductDetailEditor
-              key={index}
+              key={item.productId || index}
               item={item}
               invoiceType={formData.invoiceType}
               onUpdate={(updates) => handleUpdateItem(index, updates)}
@@ -1084,87 +605,100 @@ export const AddInvoiceScreen: React.FC = () => {
             />
           ))}
 
-          {/* Add Product Form */}
-          {showAddProductForm && (
+          {/* Add Product Form - matches Swift addProductSection */}
+          {showAddProductSection && (
             <View style={[styles.addProductForm, { borderColor: theme.colors.border.light }]}>
+              {/* Product Name */}
               <TextInput
                 style={[styles.textInput, { 
                   color: theme.colors.text.primary,
-                  borderColor: theme.colors.border.light 
+                  borderColor: theme.colors.border.light,
+                  backgroundColor: theme.colors.background.secondary,
+                  marginBottom: 12,
                 }]}
                 value={productForm.productName}
                 onChangeText={(text) => setProductForm(prev => ({ ...prev, productName: text }))}
-                placeholder="Nombre del producto"
+                placeholder="Producto"
                 placeholderTextColor={theme.colors.text.secondary}
               />
 
+              {/* Unit Price */}
               <TextInput
                 style={[styles.textInput, { 
                   color: theme.colors.text.primary,
-                  borderColor: theme.colors.border.light 
+                  borderColor: theme.colors.border.light,
+                  backgroundColor: theme.colors.background.secondary,
+                  marginBottom: 12,
                 }]}
-                value={productForm.unitPrice.toString()}
+                value={productForm.unitPrice > 0 ? productForm.unitPrice.toString() : ''}
                 onChangeText={(text) => setProductForm(prev => ({ 
                   ...prev, 
                   unitPrice: parseFloat(text) || 0 
                 }))}
-                placeholder="Precio unitario"
+                placeholder="Precio Unitario"
                 placeholderTextColor={theme.colors.text.secondary}
                 keyboardType="decimal-pad"
               />
 
+              {/* Tax Toggle - matches Swift Toggle */}
               <View style={styles.taxToggleRow}>
-                <Text style={[styles.label, { color: theme.colors.text.secondary }]}>
+                <Text style={[styles.label, { color: theme.colors.text.primary }]}>
                   IVA Incluido: {productForm.hasTax ? 'Sí' : 'No'}
                 </Text>
-                <TouchableOpacity 
-                  style={[
-                    styles.toggle,
-                    { backgroundColor: productForm.hasTax ? theme.colors.primary : theme.colors.border.light }
-                  ]}
-                  onPress={() => setProductForm(prev => ({ ...prev, hasTax: !prev.hasTax }))}
-                >
-                  <View style={[
-                    styles.toggleThumb,
-                    productForm.hasTax && styles.toggleThumbActive
-                  ]} />
-                </TouchableOpacity>
+                <Switch
+                  value={productForm.hasTax}
+                  onValueChange={(value) => setProductForm(prev => ({ ...prev, hasTax: value }))}
+                  trackColor={{ false: theme.colors.border.light, true: theme.colors.primary }}
+                  thumbColor={'#FFFFFF'}
+                />
               </View>
 
+              {/* Tax Calculations - matches Swift HStack calculations */}
               <View style={styles.calculationsRow}>
                 <Text style={[styles.calculationText, { color: theme.colors.text.secondary }]}>
-                  IVA: ${productCalculations.tax.toFixed(2)}
+                  IVA: {formatCurrency(productCalculations.tax)}
                 </Text>
                 <Text style={[styles.calculationText, { color: theme.colors.text.secondary }]}>
                   {productForm.hasTax 
-                    ? `Sin IVA: $${productCalculations.priceWithoutTax.toFixed(2)}`
-                    : `Con IVA: $${productCalculations.pricePlusTax.toFixed(2)}`
+                    ? `Precio Unitario: ${formatCurrency(productCalculations.priceWithoutTax)}`
+                    : `Precio más IVA: ${formatCurrency(productCalculations.pricePlusTax)}`
                   }
                 </Text>
               </View>
 
+              {/* Add Button - matches Swift InvoiceDetailView Button style */}
               <TouchableOpacity
                 style={[
                   styles.addProductButton,
                   { 
-                    backgroundColor: isProductFormValid ? theme.colors.primary : theme.colors.border.light,
+                    backgroundColor: isProductFormValid 
+                      ? DARK_CYAN  // Dark cyan like Swift app
+                      : theme.colors.border.light,
                   }
                 ]}
                 onPress={handleAddNewProduct}
                 disabled={!isProductFormValid}
+                activeOpacity={0.8}
               >
-                <Text style={[styles.addProductButtonText, { 
-                  color: isProductFormValid ? '#FFFFFF' : theme.colors.text.secondary 
-                }]}>
-                  ✓ Agregar
-                </Text>
+                <View style={styles.addProductButtonContent}>
+                  <Text style={[styles.addProductButtonIcon, { 
+                    color: isProductFormValid ? '#000000' : theme.colors.text.secondary 
+                  }]}>
+                    ✓
+                  </Text>
+                  <Text style={[styles.addProductButtonText, { 
+                    color: isProductFormValid ? '#000000' : theme.colors.text.secondary 
+                  }]}>
+                    Agregar Producto
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* Action buttons */}
+          {/* Action Buttons - matches Swift HStack with buttons */}
           <View style={styles.productActions}>
-            {!showAddProductForm && (
+            {!showAddProductSection && (
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={() => setShowProductSelector(true)}
@@ -1175,47 +709,128 @@ export const AddInvoiceScreen: React.FC = () => {
               </TouchableOpacity>
             )}
             
+            <View style={{ flex: 1 }} />
+            
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => setShowAddProductForm(!showAddProductForm)}
+              onPress={() => setShowAddProductSection(!showAddProductSection)}
             >
               <Text style={[styles.actionButtonText, { 
-                color: showAddProductForm ? theme.colors.error : theme.colors.primary 
+                color: showAddProductSection ? theme.colors.error : theme.colors.primary 
               }]}>
-                {showAddProductForm ? '✕' : '+'} {showAddProductForm ? 'Cancelar' : 'Nuevo'}
+                {showAddProductSection ? '✕' : '+'} 
               </Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Total Section */}
-        <InvoiceCalculator 
-          calculations={taxCalculations}
-          invoiceType={formData.invoiceType}
-          customer={formData.customer}
-        />
+        {/* Total Section - matches Swift TotalSection */}
+        <View style={[styles.section, { backgroundColor: theme.colors.surface.primary }]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>Totales</Text>
+          
+          {formData.invoiceType === InvoiceType.SujetoExcluido ? (
+            // Sujeto Excluido totals
+            <>
+              <View style={styles.totalRow}>
+                <Text style={[styles.totalLabel, { color: theme.colors.text.primary }]}>
+                  Sub Total
+                </Text>
+                <Text style={[styles.totalValue, { color: theme.colors.text.primary }]}>
+                  {formatCurrency(invoiceCalculations.totalAmount)}
+                </Text>
+              </View>
+              <View style={styles.totalRow}>
+                <Text style={[styles.totalLabel, { color: theme.colors.text.primary }]}>
+                  Renta Retenida
+                </Text>
+                <Text style={[styles.totalValue, { color: theme.colors.text.primary }]}>
+                  {formatCurrency(invoiceCalculations.reteRenta)}
+                </Text>
+              </View>
+              <View style={[styles.totalRow, styles.grandTotalRow]}>
+                <Text style={[styles.grandTotalLabel, { color: theme.colors.text.primary }]}>
+                  Total
+                </Text>
+                <Text style={[styles.grandTotalValue, { color: theme.colors.primary }]}>
+                  {formatCurrency(invoiceCalculations.totalPagar)}
+                </Text>
+              </View>
+            </>
+          ) : formData.invoiceType === InvoiceType.FacturaExportacion ? (
+            // Export invoice totals
+            <View style={[styles.totalRow, styles.grandTotalRow]}>
+              <Text style={[styles.grandTotalLabel, { color: theme.colors.text.primary }]}>
+                Total
+              </Text>
+              <Text style={[styles.grandTotalValue, { color: theme.colors.primary }]}>
+                {formatCurrency(invoiceCalculations.totalPagar)}
+              </Text>
+            </View>
+          ) : (
+            // Regular invoice totals (Factura, CCF)
+            <>
+              <View style={styles.totalRow}>
+                <Text style={[styles.totalLabel, { color: theme.colors.text.primary }]}>
+                  Sub Total
+                </Text>
+                <Text style={[styles.totalValue, { color: theme.colors.text.primary }]}>
+                  {formatCurrency(invoiceCalculations.subTotal)}
+                </Text>
+              </View>
+              <View style={styles.totalRow}>
+                <Text style={[styles.totalLabel, { color: theme.colors.text.primary }]}>
+                  IVA (13%)
+                </Text>
+                <Text style={[styles.totalValue, { color: theme.colors.text.primary }]}>
+                  {formatCurrency(invoiceCalculations.tax)}
+                </Text>
+              </View>
+              <View style={[styles.totalRow, styles.grandTotalRow]}>
+                <Text style={[styles.grandTotalLabel, { color: theme.colors.text.primary }]}>
+                  Total
+                </Text>
+                <Text style={[styles.grandTotalValue, { color: theme.colors.primary }]}>
+                  {formatCurrency(invoiceCalculations.totalAmount)}
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
 
-        {/* Create Invoice Button */}
+        {/* Create Invoice Button - matches Swift InvoiceDetailView Button style */}
         <View style={styles.createSection}>
           <TouchableOpacity
             style={[
               styles.createButton,
               { 
-                backgroundColor: isFormValid ? theme.colors.primary : theme.colors.border.light,
+                backgroundColor: isFormValid && !isSubmitting 
+                  ? DARK_CYAN  // Dark cyan like Swift app
+                  : theme.colors.border.light,
               }
             ]}
             onPress={handleCreateInvoice}
-            disabled={!isFormValid}
+            disabled={!isFormValid || isSubmitting}
+            activeOpacity={0.8}
           >
-            <Text style={[styles.createButtonText, { 
-              color: isFormValid ? '#FFFFFF' : theme.colors.text.secondary 
-            }]}>
-              ✓ Crear Factura
-            </Text>
+            <View style={styles.createButtonContent}>
+              {!isSubmitting && (
+                <Text style={[styles.createButtonIcon, { 
+                  color: isFormValid ? '#000000' : theme.colors.text.secondary 
+                }]}>
+                  ✓
+                </Text>
+              )}
+              <Text style={[styles.createButtonText, { 
+                color: isFormValid && !isSubmitting ? '#000000' : theme.colors.text.secondary 
+              }]}>
+                {isSubmitting ? 'Creando Factura...' : 'Crear Factura'}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
         <View style={styles.bottomSpacing} />
+      </ScrollView>
 
       {/* Date Picker Modal */}
       {showDatePicker && (
@@ -1257,33 +872,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   cancelButton: {
     fontSize: 16,
+    fontWeight: '500',
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
   },
   saveButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
   },
   scrollView: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: 40,
+  },
   section: {
     margin: 16,
+    marginBottom: 0,
     padding: 16,
     borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   sectionTitle: {
     fontSize: 18,
@@ -1292,7 +909,7 @@ const styles = StyleSheet.create({
   },
   customerButton: {
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
   },
   customerInfo: {
@@ -1302,13 +919,19 @@ const styles = StyleSheet.create({
   },
   customerName: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   customerDocument: {
     fontSize: 14,
+    marginTop: 2,
+  },
+  changeText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   searchButton: {
     alignItems: 'center',
+    paddingVertical: 8,
   },
   searchText: {
     fontSize: 16,
@@ -1337,64 +960,65 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 16,
   },
-  pickerContainer: {
+  typeContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 8,
+  },
+  typeOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    padding: 4,
+    borderColor: 'transparent',
   },
-  pickerOption: {
-    flex: 1,
-    padding: 8,
-    borderRadius: 4,
-    alignItems: 'center',
-    margin: 2,
-  },
-  pickerText: {
+  typeText: {
     fontSize: 14,
     fontWeight: '500',
   },
   addProductForm: {
     padding: 16,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 10,
     marginBottom: 16,
   },
   taxToggleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginVertical: 12,
-  },
-  toggle: {
-    width: 50,
-    height: 30,
-    borderRadius: 15,
-    padding: 2,
-  },
-  toggleThumb: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#FFFFFF',
-  },
-  toggleThumbActive: {
-    transform: [{ translateX: 20 }],
+    marginBottom: 12,
   },
   calculationsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginVertical: 8,
+    marginBottom: 16,
   },
   calculationText: {
-    fontSize: 14,
+    fontSize: 13,
   },
   addProductButton: {
-    padding: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12, // Increased corner radius like Swift app
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
+    minHeight: 48, // Ensure good touch target
+    // Add shadow for depth like Swift buttons
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addProductButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addProductButtonIcon: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginRight: 8,
   },
   addProductButtonText: {
     fontSize: 16,
@@ -1402,32 +1026,78 @@ const styles = StyleSheet.create({
   },
   productActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
+    alignItems: 'center',
+    marginTop: 12,
   },
   actionButton: {
-    flex: 1,
-    marginHorizontal: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   actionButtonText: {
     fontSize: 16,
     fontWeight: '500',
-    textAlign: 'center',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  totalLabel: {
+    fontSize: 16,
+  },
+  totalValue: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  grandTotalRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+    paddingTop: 12,
+    marginTop: 4,
+  },
+  grandTotalLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  grandTotalValue: {
+    fontSize: 20,
+    fontWeight: '700',
   },
   createSection: {
     margin: 16,
+    marginTop: 8,
   },
   createButton: {
-    padding: 16,
-    borderRadius: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 12, // Consistent with Swift app
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 56, // Larger button for primary action
+    // Add shadow for depth like Swift buttons
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  createButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createButtonIcon: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginRight: 10,
   },
   createButtonText: {
     fontSize: 18,
     fontWeight: '600',
   },
   bottomSpacing: {
-    height: 20,
+    height: 40,
   },
 });
 

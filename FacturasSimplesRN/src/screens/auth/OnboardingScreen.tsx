@@ -16,11 +16,39 @@ import {
 // } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { CompanyConfigurationScreen } from '../company/CompanyConfigurationScreen';
+import { CompanyConfigurationForm } from '../../components/forms/CompanyConfigurationForm';
 import { useAppDispatch } from '../../store';
 import { completeOnboarding, setGuestMode } from '../../store/slices/authSlice';
+import { CreateCompanyInput, CompanyEnvironment } from '../../types/company';
 
 const { width, height } = Dimensions.get('window');
+
+// Initial company data state - matches Swift's Company model structure
+const initialCompanyData: Partial<CreateCompanyInput> = {
+  environment: CompanyEnvironment.Development,
+  nit: '',
+  nombre: '',
+  nombreComercial: '',
+  nrc: '',
+  correo: '',
+  telefono: '',
+  complemento: '',
+  departamentoCode: '',
+  departamento: '',
+  municipioCode: '',
+  municipio: '',
+  codActividad: '',
+  descActividad: '',
+  tipoEstablecimiento: '',
+  establecimiento: '',
+  codEstableMH: 'M001',
+  codEstable: '',
+  codPuntoVentaMH: 'P001',
+  codPuntoVenta: '',
+  certificatePath: '',
+  certificatePassword: '',
+  ivaPercentage: 13,
+};
 
 interface OnboardingItem {
   id: string;
@@ -113,6 +141,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [configStep, setConfigStep] = useState<1 | 2 | 3 | 4>(1);
   const dispatch = useAppDispatch();
+
+  // LIFTED STATE: Company data persists across all onboarding steps
+  // This matches Swift's pattern: @State var company : Company in OnboardingView
+  const [companyData, setCompanyData] = useState<Partial<CreateCompanyInput>>(initialCompanyData);
 
   // Debug logging and safety checks
   useEffect(() => {
@@ -209,7 +241,19 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
 
   const handleConfigComplete = () => {
     setShowConfigModal(false);
-    // After completing configuration, automatically advance to next onboarding step
+    
+    const currentItem = onboardingData[currentIndex];
+    
+    // If we just completed the final configuration step (step 4), complete the onboarding
+    // This matches the Swift logic in AddCompanyView4 where the "Continuar" button 
+    // calls saveChanges() and sets requiresOnboarding = false
+    if (currentItem.companyStep4) {
+      console.log('Final configuration step completed, finishing onboarding...');
+      handleOnboardingComplete();
+      return;
+    }
+    
+    // For other steps, automatically advance to next onboarding step
     setTimeout(() => {
       goToNext();
     }, 300); // Small delay to allow modal to close smoothly
@@ -363,10 +407,17 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
         animationType="slide"
         presentationStyle="fullScreen"
       >
-        <CompanyConfigurationScreen
+        <CompanyConfigurationForm
           step={configStep}
           onComplete={handleConfigComplete}
           onSkip={handleConfigSkip}
+          companyData={companyData}
+          setCompanyData={setCompanyData}
+          showStepIndicator={true}
+          showSkipButton={true}
+          saveButtonText={configStep === 4 ? 'Continuar' : 'Guardar'}
+          skipButtonText="Omitir"
+          isCreating={true}            // Force creation mode for onboarding
         />
       </Modal>
     </View>

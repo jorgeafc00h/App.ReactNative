@@ -107,6 +107,7 @@ export type RootStackParamList = {
   BuyCredits: undefined;
   PurchaseHistory: undefined;
   GovernmentCatalogs: undefined;
+  CatalogDetail: { catalogId: string; catalogName: string };
 };
 
 export type TabParamList = {

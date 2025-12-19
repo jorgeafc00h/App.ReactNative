@@ -173,6 +173,78 @@ export const logoutUser = createAsyncThunk(
   }
 );
 
+export const deactivateAccount = createAsyncThunk(
+  'auth/deactivateAccount',
+  async (_, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as { auth: AuthState };
+      const { user, token } = state.auth;
+
+      if (!user || !token) {
+        return rejectWithValue('Usuario no autenticado');
+      }
+
+      // TODO: Implement actual deactivate account API call
+      const response = await fetch('/api/auth/deactivate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: user.email,
+          userId: user.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return rejectWithValue(error.message || 'Error al desactivar cuenta');
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Error de conexión');
+    }
+  }
+);
+
+export const deleteAccount = createAsyncThunk(
+  'auth/deleteAccount',
+  async (_, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as { auth: AuthState };
+      const { user, token } = state.auth;
+
+      if (!user || !token) {
+        return rejectWithValue('Usuario no autenticado');
+      }
+
+      // TODO: Implement actual delete account API call
+      const response = await fetch('/api/auth/delete', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: user.email,
+          userId: user.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return rejectWithValue(error.message || 'Error al eliminar cuenta');
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Error de conexión');
+    }
+  }
+);
+
 // Slice
 const authSlice = createSlice({
   name: 'auth',
@@ -248,9 +320,18 @@ const authSlice = createSlice({
       }
     },
 
+    // Logout action (synchronous)
+    logout: (state) => {
+      Object.assign(state, initialState);
+    },
+
     // Complete onboarding
     completeOnboarding: (state) => {
       state.hasCompletedOnboarding = true;
+      // Set guest mode when onboarding is completed without authentication
+      // This ensures the company initialization effect will trigger
+      state.isGuestMode = true;
+      state.isAuthenticated = false;
     },
 
     // Reset onboarding (for testing)
@@ -341,6 +422,36 @@ const authSlice = createSlice({
         // Even if logout API fails, clear local state
         Object.assign(state, initialState);
       });
+
+    // Deactivate account
+    builder
+      .addCase(deactivateAccount.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deactivateAccount.fulfilled, (state) => {
+        state.loading = false;
+        // Keep user logged in until they confirm the action
+      })
+      .addCase(deactivateAccount.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
+    // Delete account
+    builder
+      .addCase(deleteAccount.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deleteAccount.fulfilled, (state) => {
+        state.loading = false;
+        // Keep user logged in until they confirm the action
+      })
+      .addCase(deleteAccount.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
   },
 });
 
@@ -354,6 +465,7 @@ export const {
   restoreSession,
   setAuthenticatedUser,
   setGuestMode,
+  logout,
   completeOnboarding,
   resetOnboarding,
 } = authSlice.actions;

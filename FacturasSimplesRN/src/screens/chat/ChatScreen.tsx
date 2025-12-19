@@ -34,7 +34,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route }) => {
   const { theme } = useTheme();
   const navigation = useNavigation<ChatNavigationProp>();
   
-  const { currentCompany } = useAppSelector(state => state.companies);
+  const { companies, currentCompany } = useAppSelector(state => state.companies);
   const { user } = useAppSelector(state => state.auth);
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -47,13 +47,16 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route }) => {
   const [currentSessionId, setCurrentSessionId] = useState('');
   const [showError, setShowError] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [userId, setUserId] = useState('');
+  const [selectedCompany, setSelectedCompany] = useState(currentCompany);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   const chatService = useRef(new ChatAPIService(chatConfig));
   const signalRService = useRef(new ChatSignalRService(chatConfig));
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    initializeChat();
+    loadSelectedCompanyAndInitializeChat();
 
     // Set up SignalR event listeners
     const signalR = signalRService.current;
@@ -98,9 +101,65 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route }) => {
     };
   }, []);
 
-  const initializeChat = async () => {
+  const loadSelectedCompanyAndInitializeChat = async () => {
     try {
-      // Test API connectivity
+      setIsInitializing(true);
+      const resolvedUserId = await loadSelectedCompany();
+      await initializeChat(resolvedUserId);
+    } catch (error) {
+      console.error('Failed to load company and initialize chat:', error);
+      setError('Error al inicializar el chat');
+      setShowError(true);
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  const loadSelectedCompany = async (): Promise<string> => {
+    const selectedCompanyId = route?.params?.selectedCompanyId;
+    
+    // If no specific company ID passed, use the current company from Redux
+    const companyIdToUse = selectedCompanyId || currentCompany?.id;
+    
+    if (!companyIdToUse) {
+      console.log('⚠️ No company selected, using default user ID');
+      const defaultUserId = user ? `user-${user.id}` : `guest-${Date.now()}`;
+      setUserId(defaultUserId);
+      setSelectedCompany(currentCompany);
+      return defaultUserId;
+    }
+
+    // Find the selected company from the companies array
+    const company = companies.find(c => c.id === companyIdToUse) || currentCompany;
+    
+    if (company) {
+      setSelectedCompany(company);
+      // Use company NIT as user ID for chat session (matches Swift implementation)
+      const companyUserId = company.nit ? `company-${company.nit}` : `company-${company.id}`;
+      setUserId(companyUserId);
+      console.log('✅ Loaded company:', company.nombreComercial, 'NIT:', company.nit);
+      console.log('🆔 Using user ID for chat:', companyUserId);
+      return companyUserId;
+    } else {
+      console.log('⚠️ Company not found with ID:', companyIdToUse);
+      const defaultUserId = user ? `user-${user.id}` : `guest-${Date.now()}`;
+      setUserId(defaultUserId);
+      setSelectedCompany(currentCompany);
+      return defaultUserId;
+    }
+  };
+
+  const initializeChat = async (resolvedUserId: string) => {
+    try {
+      // Print configuration info (like Swift)
+      console.log('📱 Chat Configuration');
+      console.log('🌐 Base URL:', chatConfig.apiBaseUrl);
+      console.log('🔗 SignalR Hub:', chatConfig.signalrUrl);
+      console.log('👤 User ID:', resolvedUserId);
+      
+      console.log('🔍 Testing API connectivity...');
+      
+      // Test API connectivity first
       const isHealthy = await chatService.current.testConnection();
       
       if (!isHealthy) {
@@ -109,43 +168,32 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route }) => {
         return;
       }
 
-      // Connect to SignalR (mock)
+      console.log('✅ API is healthy, proceeding with chat initialization...');
+
+      // Connect to SignalR
       await signalRService.current.connect();
 
-      // Create or get session
-      const userId = getUserId();
-      const sessionTitle = getSessionTitle();
+      // Create or get session with company context (matches Swift implementation)
+      const sessionTitle = selectedCompany 
+        ? `Chat ${selectedCompany.nombreComercial} - ${selectedCompany.nit || selectedCompany.id}` 
+        : 'Chat Facturas Simples';
       
-      const sessionResponse = await chatService.current.createSession(userId, sessionTitle);
+      console.log('📤 Creating session with userId:', resolvedUserId, 'title:', sessionTitle);
+      
+      const sessionResponse = await chatService.current.createSession(resolvedUserId, sessionTitle);
       
       if (sessionResponse.success && sessionResponse.data) {
+        console.log('✅ Session created:', sessionResponse.data.id);
         await signalRService.current.joinSession(sessionResponse.data.id);
       } else {
         throw new Error(sessionResponse.message || 'Failed to create session');
       }
 
     } catch (error) {
-      console.error('Chat initialization error:', error);
+      console.error('❌ Chat initialization error:', error);
       setError(error instanceof Error ? error.message : 'Error al inicializar chat');
       setShowError(true);
     }
-  };
-
-  const getUserId = (): string => {
-    if (currentCompany) {
-      return `company-${currentCompany.nit || currentCompany.id}`;
-    }
-    if (user) {
-      return `user-${user.id}`;
-    }
-    return `guest-${Date.now()}`;
-  };
-
-  const getSessionTitle = (): string => {
-    if (currentCompany) {
-      return `Chat ${currentCompany.nombreComercial} - ${currentCompany.nit}`;
-    }
-    return 'Chat Facturas Simples';
   };
 
   const sendMessage = async () => {
@@ -268,9 +316,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route }) => {
           <Text style={[styles.headerTitle, { color: theme.colors.text.primary }]}>
             Asistente - Facturas Simples
           </Text>
-          {currentCompany && (
+          {selectedCompany && (
             <Text style={[styles.headerSubtitle, { color: theme.colors.text.secondary }]}>
-              Empresa: {currentCompany.nombreComercial}
+              Empresa: {selectedCompany.nombreComercial}
             </Text>
           )}
           <View style={styles.connectionStatus}>
@@ -279,7 +327,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route }) => {
               { backgroundColor: getConnectionStatusColor() }
             ]} />
             <Text style={[styles.connectionText, { color: theme.colors.text.secondary }]}>
-              {getConnectionStatusText()}
+              {isInitializing ? 'Inicializando...' : getConnectionStatusText()}
             </Text>
           </View>
         </View>
@@ -304,18 +352,27 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ route }) => {
       </View>
 
       {/* Messages */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        style={styles.messagesList}
-        contentContainerStyle={styles.messagesContent}
-        showsVerticalScrollIndicator={false}
-        ListFooterComponent={renderTypingIndicator}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
-      />
+      {isInitializing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.text.secondary }]}>
+            Iniciando chat...
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessage}
+          style={styles.messagesList}
+          contentContainerStyle={styles.messagesContent}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={renderTypingIndicator}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        />
+      )}
 
       {/* Input */}
       <View style={[styles.inputContainer, { backgroundColor: theme.colors.surface.primary }]}>
@@ -521,6 +578,17 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    textAlign: 'center',
   },
 });
 

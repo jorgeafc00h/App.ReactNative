@@ -14,10 +14,9 @@ import {
   Switch,
   ActivityIndicator,
 } from 'react-native';
-import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../../store';
-import { addCustomer } from '../../store/slices/customerSlice';
-import { Customer, CustomerType } from '../../types/customer';
+import { useAppDispatch, useAppSelector } from '../../store';
+import { addCustomer, createCustomer, fetchCustomers } from '../../store/slices/customerSlice';
+import { Customer, CustomerType, CustomerDocumentType, CreateCustomerInput } from '../../types/customer';
 import { generateId } from '../../utils';
 
 interface CreateCustomerModalProps {
@@ -31,8 +30,10 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
   onClose,
   onCustomerCreated,
 }) => {
-  const dispatch = useDispatch();
-  const { loading } = useSelector((state: RootState) => state.customers);
+  const dispatch = useAppDispatch();
+  const { loading } = useAppSelector((state) => state.customers);
+  // Get current company from Redux - this links the customer to the company (like Swift's selectedCompanyId)
+  const { currentCompany } = useAppSelector((state) => state.companies);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -98,45 +99,53 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
       return;
     }
 
+    // Ensure we have a company selected (like Swift's selectedCompanyId check)
+    if (!currentCompany?.id) {
+      Alert.alert('Error', 'No hay empresa seleccionada. Por favor seleccione una empresa primero.');
+      return;
+    }
+
     setSaving(true);
     try {
-      // Create customer object
-      const newCustomer: Customer = {
-        id: generateId(),
+      // Create customer input matching Swift's addCustomer() function
+      // Swift: newCustomer.companyOwnerId = selectedCompanyId
+      const customerInput: CreateCustomerInput = {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.trim() || '',
         phone: formData.phone.trim() || '',
         address: formData.address.trim() || '',
         nationalId: formData.nationalId.trim() || '',
-        nit: formData.nationalId.trim() || '', // Added missing nit property
-        documentType: 'DUI' as any, // Default document type
+        nit: formData.nationalId.trim() || '', // Use nationalId as NIT if not provided separately
+        documentType: CustomerDocumentType.DUI, // Default document type
         hasContributorRetention: formData.hasRetention,
         customerType: formData.customerType,
-        isActive: true,
-        companyId: '', // Will be set by the parent component
+        companyId: currentCompany.id, // Link to current company (like Swift's companyOwnerId)
         nrc: formData.nrc.trim() || '',
         taxRegistrationNumber: formData.taxRegistrationNumber.trim() || '',
         descActividad: formData.descActividad.trim() || '',
         codActividad: formData.codActividad.trim() || '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        shouldSyncToCloud: !currentCompany.isTestAccount, // Like Swift: isProductionCompany
       };
 
-      // Save to Redux store
-      dispatch(addCustomer(newCustomer));
+      // Use async createCustomer for better error handling and refresh
+      const createdCustomer = await dispatch(createCustomer(customerInput as any)).unwrap();
+      
+      // Refresh customers list to ensure it appears
+      await dispatch(fetchCustomers({ refresh: true }));
 
-      // Notify parent component
-      onCustomerCreated(newCustomer);
+      // Notify parent component with the created customer
+      onCustomerCreated(createdCustomer);
 
       // Reset form and close modal
       resetForm();
       onClose();
 
+      console.log('✅ Customer created with companyId:', createdCustomer.companyId);
       Alert.alert('Éxito', 'Cliente creado correctamente');
-    } catch (error) {
-      console.error('Error creating customer:', error);
-      Alert.alert('Error', 'No se pudo crear el cliente');
+    } catch (error: any) {
+      console.error('❌ Error creating customer:', error);
+      Alert.alert('Error', error || 'No se pudo crear el cliente');
     } finally {
       setSaving(false);
     }

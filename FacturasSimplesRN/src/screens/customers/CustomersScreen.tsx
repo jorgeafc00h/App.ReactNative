@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,10 @@ import {
   FlatList,
   RefreshControl,
   Alert,
+  Animated,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,10 +28,15 @@ import {
   selectCustomerSearchTerm,
   selectCustomerFilters,
 } from '../../store/selectors/customerSelectors';
-import { setSearchTerm, setFilters, setCurrentCustomer, deleteCustomer } from '../../store/slices/customerSlice';
+import { setSearchTerm, setFilters, setCurrentCustomer, deleteCustomer, fetchCustomers } from '../../store/slices/customerSlice';
 import { CustomerType, Customer } from '../../types/customer';
 import { CustomersStackParamList } from '../../navigation/types';
 import { CustomersListItem } from '../../components/customers/CustomersListItem';
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 type CustomersNavigation = StackNavigationProp<CustomersStackParamList, 'CustomersList'>;
 
@@ -61,6 +70,46 @@ export const CustomersScreen: React.FC = () => {
   const { invoices } = useAppSelector(state => state.invoices);
 
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
+  const [showFilters, setShowFilters] = useState(true);
+
+  // Set company filter when current company changes
+  useEffect(() => {
+    if (currentCompany?.id && filters.companyId !== currentCompany.id) {
+      console.log('CustomersScreen: Setting company filter to:', currentCompany.id);
+      dispatch(setFilters({ companyId: currentCompany.id }));
+    }
+  }, [currentCompany?.id, filters.companyId, dispatch]);
+
+  // Configure navigation header with toolbar buttons
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={toggleFilters}
+          >
+            <Ionicons 
+              name={showFilters ? 'filter' : 'filter-outline'} 
+              size={22} 
+              color={theme.colors.primary} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerButtonPrimary, { backgroundColor: theme.colors.primary }]}
+            onPress={handleAddCustomer}
+          >
+            <Ionicons name="add" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
+      ),
+    });
+  }, [navigation, theme, showFilters]);
+
+  const toggleFilters = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setShowFilters(!showFilters);
+  };
 
   // Translate the current filter selection into a tab value to mirror Swift UI chips
   const activeFilter = useMemo<FilterKey>(() => {
@@ -192,95 +241,122 @@ export const CustomersScreen: React.FC = () => {
     <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}> 
       <StatusBar style={theme.isDark ? 'light' : 'dark'} />
 
+      {/* Compact Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={[styles.subtitle, { color: theme.colors.text.secondary }]}>Base de clientes</Text>
+        <View style={styles.headerTitleContainer}>
           <Text style={[styles.title, { color: theme.colors.text.primary }]}>
-            {currentCompany ? `Clientes: ${currentCompany.nombreComercial}` : 'Clientes'}
+            {currentCompany ? currentCompany.nombreComercial : 'Clientes'}
           </Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
-          onPress={handleAddCustomer}
-        >
-          <Text style={styles.addButtonText}>+ Nuevo</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View
-        style={[
-          styles.summaryContainer,
-          { borderColor: theme.colors.border.light },
-        ]}
-      >
-        <View>
-          <Text style={[styles.summaryLabel, { color: theme.colors.text.secondary }]}>Total</Text>
-          <Text style={[styles.summaryValue, { color: theme.colors.text.primary }]}>{stats.total}</Text>
-        </View>
-        <View>
-          <Text style={[styles.summaryLabel, { color: theme.colors.text.secondary }]}>Activos</Text>
-          <Text style={[styles.summaryValue, { color: theme.colors.success }]}>{stats.actives}</Text>
-        </View>
-        <View>
-          <Text style={[styles.summaryLabel, { color: theme.colors.text.secondary }]}>Empresas</Text>
-          <Text style={[styles.summaryValue, { color: theme.colors.text.primary }]}>{stats.businesses}</Text>
-        </View>
-        <View>
-          <Text style={[styles.summaryLabel, { color: theme.colors.text.secondary }]}>Retención</Text>
-          <Text style={[styles.summaryValue, { color: theme.colors.text.primary }]}>
-            {stats.withRetention}
+          <Text style={[styles.subtitle, { color: theme.colors.text.secondary }]}>
+            {stats.total} clientes registrados
           </Text>
         </View>
       </View>
 
-      <View style={styles.searchContainer}>
-        <View
-          style={[
-            styles.searchBar,
-            {
-              backgroundColor: theme.colors.surface.primary,
-              borderColor: theme.colors.border.light,
-            },
-          ]}
-        >
-          <Text style={[styles.searchIcon, { color: theme.colors.text.secondary }]}>🔍</Text>
-          <TextInput
-            placeholder="Buscar por nombre, email o documento..."
-            placeholderTextColor={theme.colors.text.secondary}
-            style={[styles.searchInput, { color: theme.colors.text.primary }]}
-            value={searchTerm}
-            onChangeText={handleSearchChange}
-          />
-        </View>
-      </View>
+      {/* Collapsible Summary & Search Section */}
+      {showFilters && (
+        <>
+          <View
+            style={[
+              styles.summaryContainer,
+              { borderColor: theme.colors.border.light },
+            ]}
+          >
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryValue, { color: theme.colors.text.primary }]}>{stats.total}</Text>
+              <Text style={[styles.summaryLabel, { color: theme.colors.text.secondary }]}>Total</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryValue, { color: theme.colors.success }]}>{stats.actives}</Text>
+              <Text style={[styles.summaryLabel, { color: theme.colors.text.secondary }]}>Activos</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryValue, { color: theme.colors.primary }]}>{stats.businesses}</Text>
+              <Text style={[styles.summaryLabel, { color: theme.colors.text.secondary }]}>Empresas</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryValue, { color: theme.colors.warning }]}>{stats.withRetention}</Text>
+              <Text style={[styles.summaryLabel, { color: theme.colors.text.secondary }]}>Retención</Text>
+            </View>
+          </View>
 
-      <View style={styles.filterRow}>
-        {FILTER_TABS.map((tab) => {
-          const isActive = activeFilter === tab.key;
-          return (
-            <TouchableOpacity
-              key={tab.key}
+          <View style={styles.searchContainer}>
+            <View
               style={[
-                styles.filterChip,
+                styles.searchBar,
                 {
-                  backgroundColor: isActive ? theme.colors.primary : 'transparent',
-                  borderColor: isActive ? theme.colors.primary : theme.colors.border.light,
+                  backgroundColor: theme.colors.surface.primary,
+                  borderColor: theme.colors.border.light,
                 },
               ]}
-              onPress={() => applyFilter(tab.key)}
             >
-              <Text
-                style={[
-                  styles.filterText,
-                  { color: isActive ? '#FFFFFF' : theme.colors.text.secondary },
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+              <Ionicons name="search" size={18} color={theme.colors.text.secondary} style={styles.searchIcon} />
+              <TextInput
+                placeholder="Buscar por nombre, email o documento..."
+                placeholderTextColor={theme.colors.text.secondary}
+                style={[styles.searchInput, { color: theme.colors.text.primary }]}
+                value={searchTerm}
+                onChangeText={handleSearchChange}
+              />
+              {searchTerm.length > 0 && (
+                <TouchableOpacity onPress={() => handleSearchChange('')}>
+                  <Ionicons name="close-circle" size={18} color={theme.colors.text.secondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.filterRow}>
+            {FILTER_TABS.map((tab) => {
+              const isActive = activeFilter === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[
+                    styles.filterChip,
+                    {
+                      backgroundColor: isActive ? theme.colors.primary : 'transparent',
+                      borderColor: isActive ? theme.colors.primary : theme.colors.border.light,
+                    },
+                  ]}
+                  onPress={() => applyFilter(tab.key)}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      { color: isActive ? '#FFFFFF' : theme.colors.text.secondary },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
+      )}
+
+      {/* Collapsed indicator bar */}
+      {!showFilters && (
+        <TouchableOpacity 
+          style={[styles.collapsedBar, { backgroundColor: theme.colors.surface.secondary }]}
+          onPress={toggleFilters}
+        >
+          <View style={styles.collapsedContent}>
+            <Ionicons name="funnel-outline" size={14} color={theme.colors.text.secondary} />
+            <Text style={[styles.collapsedText, { color: theme.colors.text.secondary }]}>
+              {searchTerm ? `Búsqueda: "${searchTerm}"` : `${activeFilter === 'all' ? 'Todos' : activeFilter === 'business' ? 'Empresas' : 'Personas'}`}
+            </Text>
+            <Text style={[styles.collapsedCount, { color: theme.colors.primary }]}>
+              {customers.length} resultados
+            </Text>
+          </View>
+          <Ionicons name="chevron-down" size={16} color={theme.colors.text.secondary} />
+        </TouchableOpacity>
+      )}
 
       <FlatList
         data={customers}
@@ -292,7 +368,8 @@ export const CustomersScreen: React.FC = () => {
           <RefreshControl
             refreshing={loading}
             onRefresh={() => {
-              // TODO: integrate sync workflow when backend is available
+              console.log('🔄 Refreshing customers list...');
+              dispatch(fetchCustomers({ refresh: true }));
             }}
             tintColor={theme.colors.primary}
           />
@@ -312,74 +389,91 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  headerTitleContainer: {
+    flex: 1,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 14,
-    marginBottom: 4,
+    fontSize: 13,
+    marginTop: 2,
     letterSpacing: 0.2,
   },
-  addButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerButton: {
+    padding: 8,
     borderRadius: 20,
   },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+  headerButtonPrimary: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   summaryContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
+    alignItems: 'center',
     marginHorizontal: 20,
     borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 16,
+    borderRadius: 12,
     paddingVertical: 12,
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  summaryItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#E0E0E0',
   },
   summaryLabel: {
-    fontSize: 12,
+    fontSize: 11,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
+    marginTop: 2,
   },
   summaryValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    marginTop: 4,
   },
   searchContainer: {
     paddingHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   searchIcon: {
-    fontSize: 16,
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
   },
   filterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   filterChip: {
     flex: 1,
@@ -390,8 +484,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
+  },
+  collapsedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 20,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  collapsedContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  collapsedText: {
+    fontSize: 13,
+  },
+  collapsedCount: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   listContent: {
     paddingBottom: 32,
@@ -399,7 +515,7 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 120,
+    paddingTop: 100,
     paddingHorizontal: 40,
   },
   emptyIcon: {

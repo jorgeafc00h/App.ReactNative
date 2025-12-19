@@ -77,6 +77,21 @@ const normalizeInvoiceDetails = (
 
 const stamp = () => new Date().toISOString();
 
+// Convert invoice type to document type (matches Swift Extensions.documentTypeFromInvoiceType + TipoDocumento enum)
+const getDocumentTypeFromInvoiceType = (type: InvoiceType): string => {
+  switch (type) {
+    case InvoiceType.Factura: return '01';
+    case InvoiceType.CCF: return '03';  
+    case InvoiceType.NotaCredito: return '05';
+    case InvoiceType.SujetoExcluido: return '14';
+    case InvoiceType.NotaDebito: return '06';
+    case InvoiceType.NotaRemision: return '04';
+    case InvoiceType.ComprobanteLiquidacion: return '08';
+    case InvoiceType.FacturaExportacion: return '11';
+    default: return '01';
+  }
+};
+
 const buildInvoice = (input: CreateInvoiceInput): Invoice => {
   const invoiceId = `inv_${nanoid(8)}`;
   const createdAt = stamp();
@@ -90,15 +105,15 @@ const buildInvoice = (input: CreateInvoiceInput): Invoice => {
     status: InvoiceStatus.Nueva,
     customerId: input.customerId,
     invoiceType: input.invoiceType,
-    documentType: input.documentType ?? (input.invoiceType === InvoiceType.CCF ? '03' : '11'),
+    documentType: input.documentType ?? getDocumentTypeFromInvoiceType(input.invoiceType),
     generationCode: undefined,
     controlNumber: undefined,
     receptionSeal: undefined,
-    relatedDocumentNumber: undefined,
-    relatedDocumentType: undefined,
-    relatedInvoiceType: undefined,
-    relatedId: undefined,
-    relatedDocumentDate: undefined,
+    relatedDocumentNumber: input.relatedDocumentNumber,
+    relatedDocumentType: input.relatedDocumentType,
+    relatedInvoiceType: input.relatedInvoiceType,
+    relatedId: input.relatedId,
+    relatedDocumentDate: input.relatedDocumentDate ? new Date(input.relatedDocumentDate) : undefined,
     invalidatedViaApi: false,
     isHelperForCreditNote: false,
     nombEntrega: input.nombEntrega ?? '',

@@ -1,6 +1,6 @@
 // Customer slice aligned with SwiftUI functionality
 
-import { PayloadAction, createSlice, nanoid } from '@reduxjs/toolkit';
+import { PayloadAction, createSlice, createAsyncThunk, nanoid } from '@reduxjs/toolkit';
 import {
   CustomerState,
   Customer,
@@ -11,6 +11,83 @@ import {
 import { DEFAULT_COMPANY_ID } from '../../data/fixtures';
 
 const now = () => new Date().toISOString();
+
+// Async thunks for customer operations
+export const fetchCustomers = createAsyncThunk(
+  'customers/fetchCustomers',
+  async (params: { refresh?: boolean } = {}, { rejectWithValue, getState }) => {
+    try {
+      // TODO: Implement actual API call
+      // const customersService = getCustomersService();
+      // const customers = await customersService.getCustomers();
+      
+      // For now, return existing customers from state to preserve created customers
+      // When backend is implemented, this will fetch from API
+      const state = getState() as { customers: CustomerState };
+      const existingCustomers = state.customers.customers;
+      
+      return existingCustomers;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to fetch customers');
+    }
+  }
+);
+
+export const createCustomer = createAsyncThunk(
+  'customers/createCustomer',
+  async (customerInput: CreateCustomerInput, { rejectWithValue }) => {
+    try {
+      // TODO: Implement actual API call
+      // const customersService = getCustomersService();
+      // const customer = await customersService.createCustomer(customerInput);
+      
+      // For now, create customer locally
+      const customer = buildCustomer(customerInput);
+      console.log('✅ Customer created:', customer.id, customer.businessName || `${customer.firstName} ${customer.lastName}`);
+      
+      return customer;
+    } catch (error: any) {
+      console.error('❌ Failed to create customer:', error);
+      return rejectWithValue(error.message || 'Failed to create customer');
+    }
+  }
+);
+
+export const updateCustomerAsync = createAsyncThunk(
+  'customers/updateCustomerAsync',
+  async (input: UpdateCustomerInput, { rejectWithValue }) => {
+    try {
+      // TODO: Implement actual API call
+      // const customersService = getCustomersService();
+      // const customer = await customersService.updateCustomer(input);
+      
+      // For now, update locally
+      console.log('✅ Customer updated:', input.id);
+      return input;
+    } catch (error: any) {
+      console.error('❌ Failed to update customer:', error);
+      return rejectWithValue(error.message || 'Failed to update customer');
+    }
+  }
+);
+
+export const deleteCustomerAsync = createAsyncThunk(
+  'customers/deleteCustomerAsync',
+  async (customerId: string, { rejectWithValue }) => {
+    try {
+      // TODO: Implement actual API call
+      // const customersService = getCustomersService();
+      // await customersService.deleteCustomer(customerId);
+      
+      // For now, delete locally
+      console.log('✅ Customer deleted:', customerId);
+      return customerId;
+    } catch (error: any) {
+      console.error('❌ Failed to delete customer:', error);
+      return rejectWithValue(error.message || 'Failed to delete customer');
+    }
+  }
+);
 
 const buildCustomer = (input: CreateCustomerInput): Customer => {
   const timestamp = now();
@@ -41,6 +118,10 @@ const buildCustomer = (input: CreateCustomerInput): Customer => {
     taxRegistrationNumber: input.taxRegistrationNumber,
     nrc: input.nrc,
     documentTypeCatalogCode: input.documentTypeCatalogCode,
+    // Export information fields
+    codPais: input.codPais,
+    tipoPersona: input.tipoPersona,
+    tipoDocumento: input.tipoDocumento,
     shouldSyncToCloud: input.shouldSyncToCloud ?? true,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -55,7 +136,8 @@ const initialState: CustomerState = {
   error: null,
   searchTerm: '',
   filters: {
-    companyId: DEFAULT_COMPANY_ID,
+    // companyId will be set by component when company is selected
+    // No hardcoded default company to avoid cross-company data leaks
     isActive: true,
   },
   lastUpdatedAt: now(),
@@ -144,6 +226,97 @@ const customerSlice = createSlice({
     resetCustomers() {
       return initialState;
     },
+  },
+  extraReducers: (builder) => {
+    // Fetch customers
+    builder
+      .addCase(fetchCustomers.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchCustomers.fulfilled, (state, action) => {
+        state.loading = false;
+        state.customers = action.payload;
+        state.error = null;
+        state.lastUpdatedAt = now();
+      })
+      .addCase(fetchCustomers.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
+    // Create customer
+    builder
+      .addCase(createCustomer.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(createCustomer.fulfilled, (state, action) => {
+        state.loading = false;
+        state.customers.push(action.payload);
+        state.currentCustomer = action.payload;
+        state.selectedCustomerId = action.payload.id;
+        state.error = null;
+        state.lastUpdatedAt = now();
+      })
+      .addCase(createCustomer.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
+    // Update customer async
+    builder
+      .addCase(updateCustomerAsync.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateCustomerAsync.fulfilled, (state, action) => {
+        state.loading = false;
+        const { id, ...updates } = action.payload;
+        const customerIndex = state.customers.findIndex(c => c.id === id);
+        if (customerIndex !== -1) {
+          const existing = state.customers[customerIndex];
+          const updatedCustomer = {
+            ...existing,
+            ...updates,
+            updatedAt: now(),
+          };
+          state.customers[customerIndex] = updatedCustomer;
+          if (state.currentCustomer?.id === id) {
+            state.currentCustomer = updatedCustomer;
+          }
+        }
+        state.error = null;
+        state.lastUpdatedAt = now();
+      })
+      .addCase(updateCustomerAsync.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
+    // Delete customer async
+    builder
+      .addCase(deleteCustomerAsync.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deleteCustomerAsync.fulfilled, (state, action) => {
+        state.loading = false;
+        const customerId = action.payload;
+        state.customers = state.customers.filter(customer => customer.id !== customerId);
+        if (state.currentCustomer?.id === customerId) {
+          state.currentCustomer = null;
+        }
+        if (state.selectedCustomerId === customerId) {
+          state.selectedCustomerId = state.customers.length ? state.customers[0].id : null;
+        }
+        state.error = null;
+        state.lastUpdatedAt = now();
+      })
+      .addCase(deleteCustomerAsync.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
   },
 });
 

@@ -64,10 +64,6 @@ export const SettingsScreen: React.FC = () => {
     }
   };
 
-  const handleCompanyConfiguration = () => {
-    navigation.navigate('Companies');
-  };
-
   const handlePurchases = () => {
     navigation.navigate('Purchases');
   };
@@ -180,7 +176,7 @@ export const SettingsScreen: React.FC = () => {
           {currentCompany && (
             <TouchableOpacity 
               style={[styles.companySelector, { backgroundColor: theme.colors.background.secondary }]}
-              onPress={handleCompanyConfiguration}
+              onPress={handleCompanyManagement}
             >
               <View style={styles.companyInfo}>
                 <Text style={[styles.companyName, { color: theme.colors.text.primary }]}>
@@ -204,20 +200,11 @@ export const SettingsScreen: React.FC = () => {
           </Text>
           
           <View style={styles.settingsGrid}>
-            {/* Company Configuration */}
+            {/* Company Management */}
             <ModernSettingsCard
               icon="business"
-              title="Configuración Empresas"
-              subtitle="Gestionar empresas registradas"
-              iconColor="#FF9500"
-              onPress={handleCompanyConfiguration}
-            />
-            
-            {/* Company Management - Administracion de empresas */}
-            <ModernSettingsCard
-              icon="business-outline"
               title="Administración de Empresas"
-              subtitle="Gestionar empresas y configuraciones avanzadas"
+              subtitle="Gestionar empresas y configuraciones"
               iconColor="#007AFF"
               onPress={handleCompanyManagement}
             />

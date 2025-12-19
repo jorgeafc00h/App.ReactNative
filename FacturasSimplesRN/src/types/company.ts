@@ -35,6 +35,7 @@ export interface Company {
   descActividad: string; // Economic activity description
   tipoEstablecimiento: string; // Establishment type code
   establecimiento: string; // Establishment type description
+  descTipoEstablecimiento?: string; // Description of establishment type
   // MH codes with defaults from Swift
   codEstableMH: string; // Default "M001"
   codEstable: string; // Default ""
@@ -45,8 +46,17 @@ export interface Company {
   certificatePath?: string;
   certificatePassword?: string;
   
+  // Hacienda API credentials (stored securely, encrypted)
+  credentials?: string; // Encrypted API credentials from Hacienda
+  
+  // Invoice Logo (matches Swift Company.swift)
+  invoiceLogo?: string; // Base64 encoded logo image
+  logoWidth?: number; // Logo width in pixels, default 100
+  logoHeight?: number; // Logo height in pixels, default 100
+  
   // Environment and certificates
   environment: CompanyEnvironment;
+  isTestAccount: boolean; // Matches Swift Company.isTestAccount, true = test environment
   hasValidCertificate: boolean;
   certificateExpiryDate?: Date;
   certificateSubject?: string;

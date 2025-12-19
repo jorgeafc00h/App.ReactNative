@@ -41,6 +41,10 @@ export interface Customer {
   documentTypeCatalogCode?: string;
   taxRegistrationNumber?: string;
   nrc?: string;
+  // Export information fields
+  codPais?: string;
+  tipoPersona?: string;
+  tipoDocumento?: string;
   shouldSyncToCloud?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -71,6 +75,10 @@ export interface CreateCustomerInput {
   taxRegistrationNumber?: string;
   nrc?: string;
   documentTypeCatalogCode?: string;
+  // Export information fields
+  codPais?: string;
+  tipoPersona?: string;
+  tipoDocumento?: string;
   shouldSyncToCloud?: boolean;
 }
 

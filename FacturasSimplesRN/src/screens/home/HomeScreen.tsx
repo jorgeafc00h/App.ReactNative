@@ -27,8 +27,146 @@ export const HomeScreen: React.FC = () => {
   
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const currentUser = useAppSelector(selectCurrentUser);
-  const { currentCompany } = useAppSelector(state => state.companies);
+  const { currentCompany, selectedCompanyId, companies } = useAppSelector(state => state.companies);
   const { invoices } = useAppSelector(state => state.invoices);
+  
+  console.log('HomeScreen: State check', {
+    companiesLength: companies.length,
+    hasCurrentCompany: !!currentCompany,
+    currentCompanyName: currentCompany?.nombreComercial,
+    selectedCompanyId
+  });
+  
+  // If we have companies but no current company selected, show loading state
+  if (companies.length > 0 && !currentCompany) {
+    console.log('HomeScreen: Showing loading state - companies exist but no current company');
+    return (
+      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.colors.background.primary }]}>
+        <Text style={[styles.loadingText, { color: theme.colors.text.secondary }]}>
+          Cargando información de empresa...
+        </Text>
+      </View>
+    );
+  }
+
+  // If no companies exist (guest mode or new user), show welcome state
+  if (companies.length === 0) {
+    console.log('HomeScreen: Showing welcome state - no companies exist');
+    return (
+      <ScrollView style={[styles.container, { backgroundColor: theme.colors.background.secondary }]}>
+        <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+        
+        {/* Header */}
+        <View style={[styles.header, { backgroundColor: theme.colors.surface.primary }]}>
+          <View style={styles.headerContent}>
+            <View style={styles.greetingContainer}>
+              <Text style={[styles.welcomeText, { color: theme.colors.text.secondary }]}>
+                {isAuthenticated ? `Hola, ${currentUser?.firstName || 'Usuario'}` : 'Bienvenido'}
+              </Text>
+              <Text style={[styles.titleText, { color: theme.colors.text.primary }]}>
+                Comienza Aquí
+              </Text>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.profileButton}
+              onPress={() => {
+                console.log('Navigate to profile');
+              }}
+            >
+              {currentUser?.avatar ? (
+                <Image source={{ uri: currentUser.avatar }} style={styles.profileImage} />
+              ) : (
+                <View style={[styles.profilePlaceholder, { backgroundColor: theme.colors.primary }]}>
+                  <Text style={styles.profileInitials}>
+                    {currentUser ? `${currentUser.firstName?.charAt(0) || ''}${currentUser.lastName?.charAt(0) || ''}` : 'U'}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Welcome Message */}
+        <View style={styles.welcomeSection}>
+          <View style={[styles.welcomeCard, { backgroundColor: theme.colors.surface.primary }]}>
+            <Text style={[styles.welcomeTitle, { color: theme.colors.text.primary }]}>
+              ¡Bienvenido a Facturas Simples!
+            </Text>
+            <Text style={[styles.welcomeDescription, { color: theme.colors.text.secondary }]}>
+              Para comenzar a usar la aplicación, primero necesitas configurar tu empresa.
+            </Text>
+            <TouchableOpacity 
+              style={[styles.setupCompanyButton, { backgroundColor: theme.colors.primary }]}
+              onPress={() => {
+                console.log('Navigate to company setup');
+                // TODO: Navigate to CreateCompanyScreen or company management
+              }}
+            >
+              <Text style={styles.setupCompanyButtonText}>Configurar Primera Empresa</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Quick Info Cards */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>
+            ¿Qué puedes hacer?
+          </Text>
+          
+          <View style={styles.infoGrid}>
+            <View style={[styles.infoCard, { backgroundColor: theme.colors.surface.primary }]}>
+              <View style={[styles.infoIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+                <Ionicons name="document-text" size={24} color={theme.colors.primary} />
+              </View>
+              <Text style={[styles.infoTitle, { color: theme.colors.text.primary }]}>
+                Crear Facturas
+              </Text>
+              <Text style={[styles.infoDescription, { color: theme.colors.text.secondary }]}>
+                Genera facturas electrónicas de manera rápida y fácil
+              </Text>
+            </View>
+            
+            <View style={[styles.infoCard, { backgroundColor: theme.colors.surface.primary }]}>
+              <View style={[styles.infoIcon, { backgroundColor: theme.colors.success + '20' }]}>
+                <Ionicons name="checkmark-circle" size={24} color={theme.colors.success} />
+              </View>
+              <Text style={[styles.infoTitle, { color: theme.colors.text.primary }]}>
+                Cumplimiento MH
+              </Text>
+              <Text style={[styles.infoDescription, { color: theme.colors.text.secondary }]}>
+                Todos los documentos cumplen con las normas del Ministerio de Hacienda
+              </Text>
+            </View>
+            
+            <View style={[styles.infoCard, { backgroundColor: theme.colors.surface.primary }]}>
+              <View style={[styles.infoIcon, { backgroundColor: theme.colors.secondary + '20' }]}>
+                <Ionicons name="bar-chart" size={24} color={theme.colors.secondary} />
+              </View>
+              <Text style={[styles.infoTitle, { color: theme.colors.text.primary }]}>
+                Reportes
+              </Text>
+              <Text style={[styles.infoDescription, { color: theme.colors.text.secondary }]}>
+                Visualiza estadísticas y reportes de tus facturas
+              </Text>
+            </View>
+            
+            <View style={[styles.infoCard, { backgroundColor: theme.colors.surface.primary }]}>
+              <View style={[styles.infoIcon, { backgroundColor: theme.colors.warning + '20' }]}>
+                <Ionicons name="business" size={24} color={theme.colors.warning} />
+              </View>
+              <Text style={[styles.infoTitle, { color: theme.colors.text.primary }]}>
+                Multi-Empresa
+              </Text>
+              <Text style={[styles.infoDescription, { color: theme.colors.text.secondary }]}>
+                Gestiona múltiples empresas desde una sola aplicación
+              </Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    );
+  }
 
   // Note: Invoices will be loaded as users create them, initially empty
 
@@ -514,5 +652,90 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  welcomeSection: {
+    paddingHorizontal: 20,
+    marginBottom: 32,
+  },
+  welcomeCard: {
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  welcomeTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  welcomeDescription: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  setupCompanyButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  setupCompanyButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  infoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  infoCard: {
+    width: (width - 52) / 2,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  infoIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  infoDescription: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

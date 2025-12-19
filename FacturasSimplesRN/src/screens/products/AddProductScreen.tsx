@@ -15,21 +15,21 @@ import {
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
-import { RootState } from '../../store';
+import { useAppDispatch, useAppSelector } from '../../store';
 import { addProduct } from '../../store/slices/productSlice';
 import { useTheme } from '../../hooks/useTheme';
-import { Product } from '../../types/product';
+import { Product, UnitOfMeasure, TaxCategory, ProductStatus } from '../../types/product';
 import { generateId, formatCurrency } from '../../utils';
 import { BaseScreen } from '../../components/common/BaseScreen';
 
 export const AddProductScreen: React.FC = () => {
   const { theme } = useTheme();
   const navigation = useNavigation();
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   
-  const { loading } = useSelector((state: RootState) => state.products);
+  const { loading } = useAppSelector((state) => state.products);
+  const { currentCompany } = useAppSelector((state) => state.companies);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -77,9 +77,13 @@ export const AddProductScreen: React.FC = () => {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    // Required fields
+    // Required fields (matching Swift validation)
     if (!formData.name.trim()) {
       errors.name = 'El nombre es requerido';
+    }
+
+    if (!formData.description.trim()) {
+      errors.description = 'La descripción es requerida';
     }
 
     if (!formData.price.trim()) {
@@ -91,62 +95,76 @@ export const AddProductScreen: React.FC = () => {
       }
     }
 
-    // Stock validation for products (not services)
-    if (!formData.isService) {
-      if (!formData.stockQuantity.trim()) {
-        errors.stockQuantity = 'La cantidad en stock es requerida para productos';
-      } else {
-        const stock = parseInt(formData.stockQuantity);
-        if (isNaN(stock) || stock < 0) {
-          errors.stockQuantity = 'La cantidad debe ser un número mayor o igual a 0';
-        }
-      }
-
-      if (formData.minimumStock.trim()) {
-        const minStock = parseInt(formData.minimumStock);
-        if (isNaN(minStock) || minStock < 0) {
-          errors.minimumStock = 'El stock mínimo debe ser un número mayor o igual a 0';
-        }
+    // Stock validation for products (not services) - OPTIONAL to match Swift
+    if (!formData.isService && formData.stockQuantity.trim()) {
+      const stock = parseInt(formData.stockQuantity);
+      if (isNaN(stock) || stock < 0) {
+        errors.stockQuantity = 'La cantidad debe ser un número mayor o igual a 0';
       }
     }
 
-    // Code validation
+    if (!formData.isService && formData.minimumStock.trim()) {
+      const minStock = parseInt(formData.minimumStock);
+      if (isNaN(minStock) || minStock < 0) {
+        errors.minimumStock = 'El stock mínimo debe ser un número mayor o igual a 0';
+      }
+    }
+
+    // Code validation - only if provided
     if (formData.code.trim() && formData.code.length < 3) {
       errors.code = 'El código debe tener al menos 3 caracteres';
     }
 
+    console.log('Form validation errors:', errors);
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const handleSave = async () => {
+    console.log('Save button pressed - validating form...');
+    
     if (!validateForm()) {
+      console.log('Form validation failed:', validationErrors);
+      Alert.alert(
+        'Formulario Incompleto',
+        'Por favor complete todos los campos requeridos antes de guardar.',
+        [{ text: 'OK' }]
+      );
       return;
     }
 
+    console.log('Form validation passed, creating product...');
     setSaving(true);
+    
     try {
+      // Get current company ID (required for product)
+      const companyId = currentCompany?.id || 'default';
+
       const newProduct: Product = {
         id: generateId(),
-        name: formData.name.trim(),
+        productName: formData.name.trim(),
         description: formData.description.trim() || undefined,
-        code: formData.code.trim() || undefined,
-        category: formData.category.trim() || undefined,
-        price: parseFloat(formData.price),
-        stockQuantity: formData.isService ? undefined : parseInt(formData.stockQuantity),
-        minimumStock: formData.isService || !formData.minimumStock.trim() 
+        productCode: formData.code.trim() || undefined,
+        unitPrice: parseFloat(formData.price),
+        unitOfMeasure: UnitOfMeasure.UNIDAD, // Default unit of measure
+        taxCategory: formData.taxIncluded ? TaxCategory.GRAVADO : TaxCategory.EXENTO,
+        status: ProductStatus.Active,
+        stock: formData.isService || !formData.stockQuantity.trim() 
+          ? undefined 
+          : parseInt(formData.stockQuantity),
+        minStock: formData.isService || !formData.minimumStock.trim() 
           ? undefined 
           : parseInt(formData.minimumStock),
-        isService: formData.isService,
-        taxIncluded: formData.taxIncluded,
-        taxCode: formData.taxCode.trim() || undefined,
-        unitOfMeasure: formData.unitOfMeasure,
+        codigoTributo: formData.taxCode.trim() || undefined,
+        companyId: companyId,
         isActive: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
+      console.log('Dispatching addProduct action with:', newProduct);
       dispatch(addProduct(newProduct));
+      console.log('Product successfully added to store');
       
       Alert.alert(
         'Producto Creado',
@@ -154,13 +172,20 @@ export const AddProductScreen: React.FC = () => {
         [
           {
             text: 'OK',
-            onPress: () => navigation.goBack(),
+            onPress: () => {
+              console.log('Navigating back to products screen');
+              navigation.goBack();
+            },
           },
         ]
       );
     } catch (error) {
       console.error('Error creating product:', error);
-      Alert.alert('Error', 'No se pudo crear el producto');
+      Alert.alert(
+        'Error',
+        'No se pudo crear el producto. Inténtelo de nuevo.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setSaving(false);
     }
@@ -238,7 +263,10 @@ export const AddProductScreen: React.FC = () => {
               { backgroundColor: theme.colors.primary },
               saving && styles.saveButtonDisabled
             ]}
-            onPress={handleSave}
+            onPress={() => {
+              console.log('Save button touched');
+              handleSave();
+            }}
             disabled={saving}
           >
             <Text style={styles.saveText}>
@@ -335,7 +363,7 @@ export const AddProductScreen: React.FC = () => {
 
             <View style={styles.inputContainer}>
               <Text style={[styles.label, { color: theme.colors.text.secondary }]}>
-                Descripción
+                Descripción <Text style={styles.required}>*</Text>
               </Text>
               <TextInput
                 style={[
@@ -344,18 +372,21 @@ export const AddProductScreen: React.FC = () => {
                   { 
                     backgroundColor: theme.colors.background.primary,
                     color: theme.colors.text.primary,
-                    borderColor: theme.colors.border
+                    borderColor: validationErrors.description ? '#E53E3E' : theme.colors.border
                   }
                 ]}
                 value={formData.description}
                 onChangeText={(text) => updateFormData('description', text)}
-                placeholder="Descripción detallada (opcional)"
+                placeholder="Descripción detallada del producto o servicio"
                 placeholderTextColor={theme.colors.text.secondary}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
                 editable={!saving}
               />
+              {validationErrors.description && (
+                <Text style={styles.errorText}>{validationErrors.description}</Text>
+              )}
             </View>
 
             <View style={styles.row}>
@@ -473,7 +504,7 @@ export const AddProductScreen: React.FC = () => {
               <View style={styles.row}>
                 <View style={[styles.inputContainer, { flex: 1, marginRight: 10 }]}>
                   <Text style={[styles.label, { color: theme.colors.text.secondary }]}>
-                    Stock Inicial <Text style={styles.required}>*</Text>
+                    Stock Inicial
                   </Text>
                   <TextInput
                     style={[

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,14 +9,18 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../../hooks/useTheme';
 
+// Import app logo
+const AppLogo = require('../../assets/AppLogo.png');
+
 interface SplashScreenProps {
   onComplete: () => void;
 }
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   const { theme } = useTheme();
-  const fadeAnim = new Animated.Value(0);
-  const scaleAnim = new Animated.Value(0.8);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     // Start fade and scale animations
@@ -33,6 +37,22 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         useNativeDriver: true,
       }),
     ]).start();
+
+    // Pulse animation for loading dots
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.2,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
 
     // Auto-complete after 2 seconds (matching Swift implementation)
     const timer = setTimeout(() => {
@@ -61,9 +81,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
           },
         ]}
       >
-        {/* Logo/Icon */}
-        <View style={[styles.logoContainer, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-          <Text style={styles.logoText}>FS</Text>
+        {/* App Logo */}
+        <View style={styles.logoContainer}>
+          <Image 
+            source={AppLogo} 
+            style={styles.logo}
+            resizeMode="contain"
+          />
         </View>
         
         {/* App Name */}
@@ -77,17 +101,27 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         {/* Loading indicator */}
         <View style={styles.loadingContainer}>
           <View style={styles.loadingDots}>
-            <Animated.View style={[styles.dot, { opacity: fadeAnim }]} />
+            <Animated.View 
+              style={[
+                styles.dot, 
+                { transform: [{ scale: pulseAnim }] }
+              ]} 
+            />
             <Animated.View 
               style={[
                 styles.dot, 
                 { 
-                  opacity: fadeAnim,
-                  transform: [{ scale: scaleAnim }],
+                  transform: [{ scale: pulseAnim }],
+                  opacity: 0.8,
                 }
               ]} 
             />
-            <Animated.View style={[styles.dot, { opacity: fadeAnim }]} />
+            <Animated.View 
+              style={[
+                styles.dot, 
+                { transform: [{ scale: pulseAnim }] }
+              ]} 
+            />
           </View>
         </View>
       </Animated.View>
@@ -115,30 +149,31 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
+    backgroundColor: 'white',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+    overflow: 'hidden',
   },
-  logoText: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: 'white',
-    letterSpacing: -2,
+  logo: {
+    width: 130,
+    height: 130,
   },
   appName: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 8,
     textAlign: 'center',
+    letterSpacing: 0.5,
   },
   subtitle: {
     fontSize: 16,

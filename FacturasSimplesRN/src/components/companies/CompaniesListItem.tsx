@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Company } from '../../types/company';
+import { Company, CompanyEnvironment } from '../../types/company';
 import { useTheme } from '../../hooks/useTheme';
 
 interface CompaniesListItemProps {
@@ -21,7 +21,9 @@ export const CompaniesListItem: React.FC<CompaniesListItemProps> = ({
   onPress 
 }) => {
   const { theme } = useTheme();
-  const isTestAccount = company.isTestAccount || company.environment === 'development';
+  // Standardize environment checking to match other components (CompanyDetailsScreen, HomeScreen)
+  const isTestAccount = company.isTestAccount ?? (company.environment === CompanyEnvironment.Development);
+  const isProduction = !isTestAccount;
   
   return (
     <TouchableOpacity
@@ -70,7 +72,7 @@ export const CompaniesListItem: React.FC<CompaniesListItemProps> = ({
                 styles.environmentText,
                 { color: isTestAccount ? '#F59E0B' : '#10B981' }
               ]}>
-                {isTestAccount ? 'Ambiente Pruebas' : 'Ambiente Productivo'}
+                {isProduction ? 'Producción' : 'Desarrollo'}
               </Text>
             </View>
             

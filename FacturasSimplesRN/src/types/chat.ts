@@ -71,6 +71,7 @@ export interface SessionJoinedEvent {
 export interface ChatConfiguration {
   apiBaseUrl: string;
   signalrUrl: string;
+  apiKey: string;
   timeout: number;
   maxRetries: number;
 }

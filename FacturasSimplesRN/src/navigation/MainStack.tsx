@@ -9,6 +9,10 @@ import { ChatScreen } from '../screens/chat/ChatScreen';
 import CompaniesScreen from '../screens/companies/CompaniesScreen';
 import CompanyDetailsScreen from '../screens/companies/CompanyDetailsScreen';
 import { CreateCompanyScreen } from '../screens/companies/CreateCompanyScreen';
+import { CompanyConfigurationScreen } from '../screens/company/CompanyConfigurationScreen';
+import { CatalogsScreen } from '../screens/settings/CatalogsScreen';
+import { CatalogDetailScreen } from '../screens/settings/CatalogDetailScreen';
+import { AccountSummaryScreen } from '../screens/account/AccountSummaryScreen';
 import { RootStackParamList } from '../types';
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -47,11 +51,11 @@ export const MainStack: React.FC = () => {
         options={{ title: 'Crear Empresa', headerShown: false }}
       />
       
-      {/* Placeholder screens for other navigation items */}
+      {/* Company Configuration */}
       <Stack.Screen 
         name="CompanyConfiguration" 
-        component={PlaceholderScreen}
-        options={{ title: 'Configuración Empresas' }}
+        component={CompanyConfigurationScreen}
+        options={{ title: 'Configuración Empresas', headerShown: false }}
       />
       <Stack.Screen 
         name="Purchases" 
@@ -60,7 +64,7 @@ export const MainStack: React.FC = () => {
       />
       <Stack.Screen 
         name="AccountSummary" 
-        component={PlaceholderScreen}
+        component={AccountSummaryScreen}
         options={{ title: 'Resumen Cuenta' }}
       />
       <Stack.Screen 
@@ -75,8 +79,13 @@ export const MainStack: React.FC = () => {
       />
       <Stack.Screen 
         name="GovernmentCatalogs" 
-        component={PlaceholderScreen}
+        component={CatalogsScreen}
         options={{ title: 'Catálogos Hacienda' }}
+      />
+      <Stack.Screen 
+        name="CatalogDetail" 
+        component={CatalogDetailScreen}
+        options={{ title: 'Detalle de Catálogo' }}
       />
       <Stack.Screen 
         name="Certificates" 

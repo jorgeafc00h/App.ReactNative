@@ -82,6 +82,12 @@ export interface CreateInvoiceInput {
   companyId: string;
   items: InvoiceDetailInput[];
   documentType?: string;
+  // Related document info (for credit notes, debit notes, etc.)
+  relatedDocumentNumber?: string;
+  relatedDocumentType?: string;
+  relatedInvoiceType?: InvoiceType;
+  relatedId?: string;
+  relatedDocumentDate?: string;
   // Delivery info for remission notes
   nombEntrega?: string;
   docuEntrega?: string;

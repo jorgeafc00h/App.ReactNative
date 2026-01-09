@@ -33,7 +33,8 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   invoice,
 }) => {
   const selectedCompany = useSelector((state: RootState) => state.companies.currentCompany);
-  const isProduction = useSelector((state: RootState) => state.app.environment === 'production');
+  // Use company-specific environment, not global app environment (matches Swift)
+  const isProduction = selectedCompany?.environment === 'PRODUCTION' && selectedCompany?.isTestAccount !== true;
 
   const [pdfGenerationService] = useState(() => getPDFGenerationService(isProduction));
   const [pdfResult, setPdfResult] = useState<PDFGenerationResult | null>(null);

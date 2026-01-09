@@ -11,6 +11,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   Switch,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
@@ -71,6 +72,7 @@ export const AddInvoiceScreen: React.FC = () => {
   const customers = useAppSelector(selectAllCustomers);
   const products = useAppSelector(selectAllProducts);
   const currentCompany = useAppSelector(selectCurrentCompany);
+  const allInvoices = useAppSelector(state => state.invoices.invoices);
 
   // Form state - matches Swift ViewModel
   const [formData, setFormData] = useState<AddInvoiceFormData>({
@@ -91,6 +93,7 @@ export const AddInvoiceScreen: React.FC = () => {
   const [showProductSelector, setShowProductSelector] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showAddProductSection, setShowAddProductSection] = useState(false);
+  const [showInvoiceTypePicker, setShowInvoiceTypePicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Product form state - matches Swift addProductSection
@@ -120,7 +123,6 @@ export const AddInvoiceScreen: React.FC = () => {
 
     // Get all invoices for the current company and document type
     // This matches Swift's FetchDescriptor with predicate filtering
-    const allInvoices = useAppSelector(state => state.invoices.invoices);
     
     // Convert invoice type to document type (matches Swift Extensions.documentTypeFromInvoiceType + TipoDocumento enum)
     const getDocumentType = (type: InvoiceType): string => {
@@ -158,7 +160,7 @@ export const AddInvoiceScreen: React.FC = () => {
     } else {
       return '00001'; // First invoice for this company and document type
     }
-  }, [currentCompany?.id]);
+  }, [currentCompany?.id, allInvoices]);
 
   // Initialize form on mount - matches Swift onAppear
   useEffect(() => {
@@ -513,37 +515,20 @@ export const AddInvoiceScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Invoice Type - matches Swift Picker */}
+          {/* Invoice Type - Dropdown */}
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: theme.colors.text.secondary }]}>
               Tipo Documento
             </Text>
-            <View style={[styles.typeContainer, { borderColor: theme.colors.border.light }]}>
-              {invoiceTypes.map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.typeOption,
-                    formData.invoiceType === type && { 
-                      backgroundColor: theme.colors.primary + '20',
-                      borderColor: theme.colors.primary,
-                    }
-                  ]}
-                  onPress={() => setFormData(prev => ({ ...prev, invoiceType: type }))}
-                >
-                  <Text style={[
-                    styles.typeText,
-                    { 
-                      color: formData.invoiceType === type 
-                        ? theme.colors.primary 
-                        : theme.colors.text.primary 
-                    }
-                  ]}>
-                    {getInvoiceTypeName(type)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TouchableOpacity 
+              style={[styles.dropdown, { borderColor: theme.colors.border.light, backgroundColor: theme.colors.background.secondary }]}
+              onPress={() => setShowInvoiceTypePicker(true)}
+            >
+              <Text style={[styles.dropdownText, { color: theme.colors.text.primary }]}>
+                {getInvoiceTypeName(formData.invoiceType)}
+              </Text>
+              <Text style={[styles.dropdownArrow, { color: theme.colors.text.secondary }]}>▼</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -857,6 +842,56 @@ export const AddInvoiceScreen: React.FC = () => {
         onSelect={handleProductSelect}
         onClose={() => setShowProductSelector(false)}
       />
+
+      {/* Invoice Type Picker Modal */}
+      <Modal
+        visible={showInvoiceTypePicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        transparent={false}
+      >
+        <View style={[styles.modal, { backgroundColor: theme.colors.background.primary }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.colors.border.light }]}>
+            <TouchableOpacity onPress={() => setShowInvoiceTypePicker(false)}>
+              <Text style={[styles.cancelButton, { color: theme.colors.text.secondary }]}>Cancelar</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: theme.colors.text.primary }]}>Tipo Documento</Text>
+            <View style={{ width: 60 }} />
+          </View>
+
+          <View style={styles.typeOptionsContainer}>
+            {invoiceTypes.map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={[
+                  styles.typeOptionRow,
+                  { borderBottomColor: theme.colors.border.light },
+                  formData.invoiceType === type && { backgroundColor: theme.colors.primary + '10' }
+                ]}
+                onPress={() => {
+                  setFormData(prev => ({ ...prev, invoiceType: type }));
+                  setShowInvoiceTypePicker(false);
+                }}
+              >
+                <Text style={[
+                  styles.typeOptionText,
+                  { 
+                    color: formData.invoiceType === type 
+                      ? theme.colors.primary 
+                      : theme.colors.text.primary,
+                    fontWeight: formData.invoiceType === type ? '600' : '400'
+                  }
+                ]}>
+                  {getInvoiceTypeName(type)}
+                </Text>
+                {formData.invoiceType === type && (
+                  <Text style={[styles.checkmark, { color: theme.colors.primary }]}>✓</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -960,21 +995,54 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 16,
   },
-  typeContainer: {
+  dropdown: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  typeOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderRadius: 8,
+    minHeight: 48,
   },
-  typeText: {
-    fontSize: 14,
-    fontWeight: '500',
+  dropdownText: {
+    fontSize: 16,
+    flex: 1,
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    marginLeft: 8,
+  },
+  modal: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  typeOptionsContainer: {
+    flex: 1,
+  },
+  typeOptionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  typeOptionText: {
+    fontSize: 16,
+    flex: 1,
+  },
+  checkmark: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   addProductForm: {
     padding: 16,

@@ -33,8 +33,8 @@ import { CustomerType, Customer } from '../../types/customer';
 import { CustomersStackParamList } from '../../navigation/types';
 import { CustomersListItem } from '../../components/customers/CustomersListItem';
 
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+// Enable LayoutAnimation for Android (skip in New Architecture to avoid no-op warning)
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(global as any).__turboModuleProxy) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 

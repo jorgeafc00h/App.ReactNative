@@ -58,7 +58,7 @@ export const InvoicePDFPreview: React.FC<InvoicePDFPreviewProps> = ({
   // Get company and customer from Redux if not provided
   const reduxCompany = useAppSelector(state => state.companies.currentCompany);
   const company = propCompany || reduxCompany;
-  const isProduction = company?.environment === 'PRODUCTION' || !company?.isTestAccount;
+  const isProduction = company?.environment === 'PRODUCTION' && company?.isTestAccount !== true;
   
   // Get customer data using selector
   const customerSelector = useCallback(

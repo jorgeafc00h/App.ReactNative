@@ -257,8 +257,8 @@ const companySlice = createSlice({
         currentCompany: state.currentCompany?.id
       });
       
-      // Set default company if none selected and companies exist
-      if (!state.selectedCompanyId && state.companies.length > 0) {
+      // Set default company if no current company but companies exist
+      if (!state.currentCompany && state.companies.length > 0) {
         // First try to find a company marked as default
         let defaultCompany = state.companies.find(c => c.isDefault);
         
@@ -277,10 +277,23 @@ const companySlice = createSlice({
         } else {
           console.error('CompanySlice: No companies available to select!');
         }
+      } else if (state.selectedCompanyId && !state.currentCompany && state.companies.length > 0) {
+        // Handle case where selectedCompanyId exists but currentCompany is null
+        const selectedCompany = state.companies.find(c => c.id === state.selectedCompanyId);
+        if (selectedCompany) {
+          state.currentCompany = selectedCompany;
+          console.log('CompanySlice: Restored currentCompany from selectedCompanyId:', selectedCompany.nombreComercial);
+        } else {
+          console.warn('CompanySlice: selectedCompanyId not found in companies, resetting to first company');
+          const firstCompany = state.companies[0];
+          state.selectedCompanyId = firstCompany.id;
+          state.currentCompany = firstCompany;
+        }
       } else {
         console.log('CompanySlice: Conditions not met for default selection', {
-          hasSelectedId: !!state.selectedCompanyId,
-          hasCompanies: state.companies.length > 0
+          hasCurrentCompany: !!state.currentCompany,
+          hasCompanies: state.companies.length > 0,
+          selectedCompanyId: state.selectedCompanyId
         });
       }
     },

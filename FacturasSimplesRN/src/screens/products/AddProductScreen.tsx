@@ -134,11 +134,18 @@ export const AddProductScreen: React.FC = () => {
     }
 
     console.log('Form validation passed, creating product...');
+    
+    // Ensure we have a company selected (like Swift's selectedCompanyId check)
+    if (!currentCompany?.id) {
+      Alert.alert('Error', 'No hay empresa seleccionada. Por favor seleccione una empresa primero.');
+      return;
+    }
+    
     setSaving(true);
     
     try {
-      // Get current company ID (required for product)
-      const companyId = currentCompany?.id || 'default';
+      // Get current company ID (required for product linking)
+      const companyId = currentCompany.id;
 
       const newProduct: Product = {
         id: generateId(),
@@ -162,6 +169,11 @@ export const AddProductScreen: React.FC = () => {
         updatedAt: new Date().toISOString(),
       };
 
+      console.log('📦 Creating product linked to company:', {
+        productName: newProduct.productName,
+        companyId: newProduct.companyId,
+        companyName: currentCompany.nombreComercial
+      });
       console.log('Dispatching addProduct action with:', newProduct);
       dispatch(addProduct(newProduct));
       console.log('Product successfully added to store');

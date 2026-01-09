@@ -12,12 +12,15 @@ export interface DTE_Base {
   resumen: DTESummary;
   extension?: DTEExtension;
   apendice?: DTEAppendix[];
+
+  // Swift includes this optional field for Sujeto Excluido DTEs
+  sujetoExcluido?: DTEReceptor;
 }
 
 // DTE Identification
 export interface DTEIdentification {
   version: number;
-  ambiente: string; // Environment: 00 = Production, 01 = Test
+  ambiente: string; // Environment code (Swift-compatible): '01' = Production, '00' = Development/Test
   tipoDte: string; // Document type code
   numeroControl: string;
   codigoGeneracion: string;
@@ -44,7 +47,7 @@ export interface DTEEmisor {
   nrc: string;
   nombre: string;
   codActividad: string;
-  descActividad: string;
+  descActividad?: string;
   nombreComercial?: string;
   tipoEstablecimiento: string;
   direccion: DTEAddress;
@@ -54,6 +57,11 @@ export interface DTEEmisor {
   codEstable?: string;
   codPuntoVentaMH?: string;
   codPuntoVenta?: string;
+
+  // Export-specific fields for FacturaExportacion (tipoDte="11")
+  tipoItemExpor?: number;
+  recintoFiscal?: string;
+  regimen?: string;
 }
 
 // Receiver (Customer)
@@ -68,6 +76,16 @@ export interface DTEReceptor {
   direccion?: DTEAddress;
   telefono?: string;
   correo?: string;
+
+  // Some DTE types include these
+  nit?: string;
+  bienTitulo?: string;
+  complemento?: string;
+
+  // Export-specific fields for FacturaExportacion
+  codPais?: string;
+  nombrePais?: string;
+  tipoPersona?: number;
 }
 
 // Address structure
@@ -140,16 +158,27 @@ export interface DTESummary {
   totalDescu: number;
   tributos?: DTETribute[];
   subTotal: number;
-  ivaRete1?: number;
-  reteRenta?: number;
+  ivaRete1: number;
+  reteRenta: number;
   montoTotalOperacion: number;
   totalNoGravado: number;
   totalPagar: number;
   totalLetras: string;
-  saldoFavor?: number;
+  totalIva?: number;
+  saldoFavor: number;
   condicionOperacion: number;
   pagos?: DTEPayment[];
   numPagoElectronico?: string;
+
+  // Export-specific fields (FacturaExportacion)
+  descuento?: number;
+  seguro?: number;
+  flete?: number;
+  codIncoterms?: string;
+  descIncoterms?: string;
+  observaciones?: string;
+  totalCompra?: number;
+  ivaPerci1?: number;
 }
 
 // Payment information

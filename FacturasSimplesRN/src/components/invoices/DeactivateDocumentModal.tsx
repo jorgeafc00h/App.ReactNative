@@ -15,6 +15,13 @@ import {
 } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import { Invoice, InvoiceType } from '../../types/invoice';
+import { useAppSelector, useAppDispatch } from '../../store';
+import { updateInvoice } from '../../store/slices/invoiceSlice';
+import { 
+  createInvalidationService, 
+  InvalidationReason, 
+  INVALIDATION_REASON_DESCRIPTIONS 
+} from '../../services/invalidation/InvoiceInvalidationService';
 
 interface DeactivateDocumentModalProps {
   visible: boolean;
@@ -23,12 +30,12 @@ interface DeactivateDocumentModalProps {
   onSuccess: () => void;
 }
 
-// Anulación reasons matching Swift options
+// Map service reasons to UI options
 const ANULACION_REASONS = [
-  { code: '1', description: 'Error en la información del documento' },
-  { code: '2', description: 'Devolución de producto' },
-  { code: '3', description: 'Anulación por acuerdo entre las partes' },
-  { code: '4', description: 'Otro' },
+  { code: InvalidationReason.ErrorInformation, description: INVALIDATION_REASON_DESCRIPTIONS[InvalidationReason.ErrorInformation] },
+  { code: InvalidationReason.ProductReturn, description: INVALIDATION_REASON_DESCRIPTIONS[InvalidationReason.ProductReturn] },
+  { code: InvalidationReason.MutualAgreement, description: INVALIDATION_REASON_DESCRIPTIONS[InvalidationReason.MutualAgreement] },
+  { code: InvalidationReason.Other, description: INVALIDATION_REASON_DESCRIPTIONS[InvalidationReason.Other] },
 ];
 
 export const DeactivateDocumentModal: React.FC<DeactivateDocumentModalProps> = ({
@@ -38,8 +45,11 @@ export const DeactivateDocumentModal: React.FC<DeactivateDocumentModalProps> = (
   onSuccess,
 }) => {
   const { theme } = useTheme();
+  const dispatch = useAppDispatch();
+  const { currentCompany } = useAppSelector(state => state.companies);
+  const isProduction = currentCompany?.environment === 'PRODUCTION' && currentCompany?.isTestAccount !== true;
   
-  const [selectedReason, setSelectedReason] = useState<string | null>(null);
+  const [selectedReason, setSelectedReason] = useState<InvalidationReason | null>(null);
   const [customReason, setCustomReason] = useState('');
   const [responsibleName, setResponsibleName] = useState('');
   const [responsibleDocument, setResponsibleDocument] = useState('');
@@ -70,14 +80,39 @@ export const DeactivateDocumentModal: React.FC<DeactivateDocumentModalProps> = (
 
   const isFormValid = () => {
     if (!selectedReason) return false;
-    if (selectedReason === '4' && !customReason.trim()) return false;
+    if (selectedReason === InvalidationReason.Other && !customReason.trim()) return false;
     if (!responsibleName.trim()) return false;
     if (!responsibleDocument.trim()) return false;
     return true;
   };
 
+  // Check if invoice can be invalidated
+  const canInvalidateInvoice = () => {
+    if (!currentCompany) return { canInvalidate: false, reason: 'No hay empresa seleccionada' };
+    
+    const invalidationService = createInvalidationService(isProduction);
+    return invalidationService.canInvalidateInvoice(invoice);
+  };
+
+  const invalidationCheck = canInvalidateInvoice();
+  
+  // Don't render modal if invoice can't be invalidated
+  if (!invalidationCheck.canInvalidate) {
+    React.useEffect(() => {
+      if (visible) {
+        Alert.alert(
+          'No se puede anular',
+          invalidationCheck.reason || 'Este documento no puede ser anulado',
+          [{ text: 'OK', onPress: onClose }]
+        );
+      }
+    }, [visible]);
+    
+    return null;
+  }
+
   const handleSubmit = async () => {
-    if (!isFormValid()) {
+    if (!isFormValid() || !currentCompany || !selectedReason) {
       Alert.alert('Error', 'Por favor complete todos los campos requeridos');
       return;
     }
@@ -85,18 +120,54 @@ export const DeactivateDocumentModal: React.FC<DeactivateDocumentModalProps> = (
     setIsSubmitting(true);
 
     try {
-      // TODO: Implement actual API call to anular document
-      // This would call the Hacienda API for anulación
+      console.log('📱 DeactivateDocumentModal: Starting invoice invalidation process');
       
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulated delay
+      const invalidationService = createInvalidationService(isProduction);
       
-      Alert.alert(
-        'Éxito',
-        'El documento ha sido anulado correctamente',
-        [{ text: 'OK', onPress: onSuccess }]
+      const invalidationRequest = {
+        reason: selectedReason,
+        customReason: selectedReason === InvalidationReason.Other ? customReason : undefined,
+        responsibleName: responsibleName.trim(),
+        responsibleDocument: responsibleDocument.trim(),
+      };
+      
+      const result = await invalidationService.invalidateInvoice(
+        invoice,
+        currentCompany,
+        invalidationRequest
       );
+      
+      if (result.success) {
+        // Update invoice in Redux store
+        dispatch(updateInvoice({
+          id: invoice.id,
+          invalidatedViaApi: true,
+          invalidatedAt: result.invalidatedAt || new Date().toISOString(),
+          invalidationReason: selectedReason === InvalidationReason.Other ? customReason : INVALIDATION_REASON_DESCRIPTIONS[selectedReason],
+        }));
+        
+        Alert.alert(
+          'Éxito',
+          result.message,
+          [{ text: 'OK', onPress: onSuccess }]
+        );
+        
+        console.log(`✅ DeactivateDocumentModal: Invoice ${invoice.invoiceNumber} invalidated successfully`);
+      } else {
+        Alert.alert(
+          'Error',
+          result.message,
+          [{ text: 'OK' }]
+        );
+        
+        console.error(`❌ DeactivateDocumentModal: Invalidation failed: ${result.message}`);
+      }
+      
     } catch (error) {
-      Alert.alert('Error', 'No se pudo anular el documento. Intente nuevamente.');
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      Alert.alert('Error', `No se pudo anular el documento: ${errorMessage}`);
+      
+      console.error('❌ DeactivateDocumentModal: Exception during invalidation:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -208,7 +279,7 @@ export const DeactivateDocumentModal: React.FC<DeactivateDocumentModalProps> = (
             ))}
 
             {/* Custom Reason Input (when "Otro" is selected) */}
-            {selectedReason === '4' && (
+            {selectedReason === InvalidationReason.Other && (
               <View style={styles.customReasonContainer}>
                 <TextInput
                   style={[styles.textInput, styles.textArea, { 

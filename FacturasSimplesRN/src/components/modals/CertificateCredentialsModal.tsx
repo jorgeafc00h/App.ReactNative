@@ -18,6 +18,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { Company } from '../../types/company';
 import { CertificateService } from '../../services/security/CertificateService';
+import { useAppDispatch } from '../../store';
+import { updateCompanyLocal } from '../../store/slices/companySlice';
+import { isProductionCompany } from '../../utils/companyEnvironment';
 
 interface CertificateCredentialsModalProps {
   visible: boolean;
@@ -37,6 +40,7 @@ export const CertificateCredentialsModal: React.FC<CertificateCredentialsModalPr
   onCredentialsUpdated,
 }) => {
   const { theme } = useTheme();
+  const dispatch = useAppDispatch();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isValidating, setIsValidating] = useState(false);
@@ -44,8 +48,7 @@ export const CertificateCredentialsModal: React.FC<CertificateCredentialsModalPr
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // isProduction is the inverse of isTestAccount (matches Swift Company.isProduction)
-  const isProduction = !company.isTestAccount;
+  const isProduction = isProductionCompany(company);
   const certificateService = new CertificateService(isProduction);
 
   const resetForm = () => {
@@ -90,6 +93,23 @@ export const CertificateCredentialsModal: React.FC<CertificateCredentialsModalPr
               );
 
               if (result.isValid) {
+                // Get the encrypted password to update company state (matches Swift: company.certificatePassword = encryptedPassword)
+                const nit = company.nit;
+                if (!nit) {
+                  throw new Error('La empresa no tiene NIT configurado');
+                }
+                const encryptedPassword = await certificateService.getCertificatePassword(nit);
+                
+                // Update company in Redux state with encrypted password and certificate status
+                dispatch(updateCompanyLocal({
+                  id: company.id,
+                  updates: {
+                    certificatePassword: encryptedPassword || '',
+                    hasValidCertificate: true,
+                    updatedAt: new Date().toISOString()
+                  }
+                }));
+
                 Alert.alert('Éxito', result.message);
                 onCredentialsUpdated(true);
                 handleClose();
@@ -130,6 +150,15 @@ export const CertificateCredentialsModal: React.FC<CertificateCredentialsModalPr
               const result = await certificateService.uploadCertificate(certificateFile, company);
               
               if (result.success) {
+                // Update company in Redux state when certificate is uploaded successfully
+                dispatch(updateCompanyLocal({
+                  id: company.id,
+                  updates: {
+                    certificatePath: certificateFile.name, // Store the certificate file name
+                    updatedAt: new Date().toISOString()
+                  }
+                }));
+
                 Alert.alert('Éxito', result.message);
                 onCredentialsUpdated(true);
               } else {

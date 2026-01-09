@@ -37,9 +37,9 @@ export const CertificateUpload: React.FC<CertificateUploadProps> = ({
   const selectedCompany = useSelector((state: RootState) => 
     company || state.companies.currentCompany
   );
-  const isProduction = useSelector((state: RootState) => 
-    state.app.environment === 'production'
-  );
+  const currentCompany = useSelector((state: RootState) => state.companies.currentCompany);
+  // Use company-specific environment, not global app environment (matches Swift)
+  const isProduction = currentCompany?.environment === 'PRODUCTION' && currentCompany?.isTestAccount !== true;
 
   // Local state
   const [selectedFile, setSelectedFile] = useState<CertificateFile | null>(null);

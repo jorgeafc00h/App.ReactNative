@@ -7,23 +7,54 @@ import {
   TouchableOpacity,
   Dimensions,
   Image,
+  Animated,
+  RefreshControl,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { TabNavigatorParamList } from '../../navigation/types';
+import { RootStackParamList } from '../../types';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { selectIsAuthenticated, selectCurrentUser } from '../../store/selectors/authSelectors';
+import { initializeDefaultCompany } from '../../store/slices/companySlice';
 import { useTheme } from '../../hooks/useTheme';
 import { InvoiceStatus } from '../../types/invoice';
 import { CompanyEnvironment } from '../../types/company';
 
 const { width } = Dimensions.get('window');
 
+type HomeScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<TabNavigatorParamList, 'Home'>,
+  StackNavigationProp<RootStackParamList>
+>;
+
 export const HomeScreen: React.FC = () => {
   const { theme } = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<HomeScreenNavigationProp>();
   const dispatch = useAppDispatch();
+  const [refreshing, setRefreshing] = React.useState(false);
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    // Simulate refresh - in real app this would refetch data
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 2000);
+  }, []);
   
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const currentUser = useAppSelector(selectCurrentUser);
@@ -37,13 +68,18 @@ export const HomeScreen: React.FC = () => {
     selectedCompanyId
   });
   
-  // If we have companies but no current company selected, show loading state
+  // If we have companies but no current company selected, trigger company initialization and show loading
   if (companies.length > 0 && !currentCompany) {
-    console.log('HomeScreen: Showing loading state - companies exist but no current company');
+    console.log('HomeScreen: Companies exist but no current company - triggering initialization');
+    // Dispatch action to initialize default company if not already done
+    React.useEffect(() => {
+      dispatch(initializeDefaultCompany());
+    }, [dispatch]);
+    
     return (
       <View style={[styles.container, styles.centerContent, { backgroundColor: theme.colors.background.primary }]}>
         <Text style={[styles.loadingText, { color: theme.colors.text.secondary }]}>
-          Cargando información de empresa...
+          Inicializando empresa...
         </Text>
       </View>
     );
@@ -57,13 +93,18 @@ export const HomeScreen: React.FC = () => {
         <StatusBar style={theme.isDark ? 'light' : 'dark'} />
         
         {/* Header */}
-        <View style={[styles.header, { backgroundColor: theme.colors.surface.primary }]}>
+        <LinearGradient
+          colors={[theme.colors.primary, '#6366F1', '#8B5CF6']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.gradientHeader}
+        >
           <View style={styles.headerContent}>
             <View style={styles.greetingContainer}>
-              <Text style={[styles.welcomeText, { color: theme.colors.text.secondary }]}>
+              <Text style={styles.welcomeText}>
                 {isAuthenticated ? `Hola, ${currentUser?.firstName || 'Usuario'}` : 'Bienvenido'}
               </Text>
-              <Text style={[styles.titleText, { color: theme.colors.text.primary }]}>
+              <Text style={styles.titleText}>
                 Comienza Aquí
               </Text>
             </View>
@@ -85,7 +126,7 @@ export const HomeScreen: React.FC = () => {
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </LinearGradient>
 
         {/* Welcome Message */}
         <View style={styles.welcomeSection}>
@@ -98,10 +139,7 @@ export const HomeScreen: React.FC = () => {
             </Text>
             <TouchableOpacity 
               style={[styles.setupCompanyButton, { backgroundColor: theme.colors.primary }]}
-              onPress={() => {
-                console.log('Navigate to company setup');
-                // TODO: Navigate to CreateCompanyScreen or company management
-              }}
+              onPress={() => navigation.navigate('CreateCompany')}
             >
               <Text style={styles.setupCompanyButtonText}>Configurar Primera Empresa</Text>
             </TouchableOpacity>
@@ -177,7 +215,8 @@ export const HomeScreen: React.FC = () => {
       icon: 'document-text' as keyof typeof Ionicons.glyphMap,
       color: theme.colors.primary,
       onPress: () => {
-        console.log('Navigate to create invoice');
+        // Navigate to Invoices tab first, then to AddInvoice screen
+        navigation.navigate('Invoices');
       },
     },
     {
@@ -186,7 +225,8 @@ export const HomeScreen: React.FC = () => {
       icon: 'qr-code-outline' as keyof typeof Ionicons.glyphMap,
       color: theme.colors.success,
       onPress: () => {
-        console.log('Open QR scanner');
+        // TODO: Implement QR scanner functionality
+        alert('Función de escaneo QR próximamente disponible');
       },
     },
     {
@@ -195,7 +235,8 @@ export const HomeScreen: React.FC = () => {
       icon: 'bar-chart' as keyof typeof Ionicons.glyphMap,
       color: theme.colors.secondary,
       onPress: () => {
-        console.log('Navigate to reports');
+        // Navigate to invoices for now, could be a reports screen later
+        navigation.navigate('Invoices');
       },
     },
     {
@@ -204,7 +245,7 @@ export const HomeScreen: React.FC = () => {
       icon: 'settings' as keyof typeof Ionicons.glyphMap,
       color: theme.colors.warning,
       onPress: () => {
-        console.log('Navigate to settings');
+        navigation.navigate('Settings');
       },
     },
   ];
@@ -213,7 +254,6 @@ export const HomeScreen: React.FC = () => {
   
   const totalAmount = invoices.reduce((sum, invoice) => sum + (invoice.totalAmountIncludingTax || 0), 0);
   const pendingInvoices = invoices.filter(invoice => invoice.status === InvoiceStatus.Nueva).length;
-  const completedInvoices = invoices.filter(invoice => invoice.status === InvoiceStatus.Completada).length;
 
   const getStatusColor = (status: InvoiceStatus) => {
     switch (status) {
@@ -233,26 +273,29 @@ export const HomeScreen: React.FC = () => {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background.secondary }]}>
-      <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      <StatusBar style="light" />
       
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.colors.surface.primary }]}>
+      {/* Enhanced Header with Gradient */}
+      <LinearGradient
+        colors={[theme.colors.primary, '#6366F1', '#8B5CF6']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.gradientHeader}
+      >
         <View style={styles.headerContent}>
           <View style={styles.greetingContainer}>
-            <Text style={[styles.welcomeText, { color: theme.colors.text.secondary }]}>
+            <Text style={styles.welcomeText}>
               {isAuthenticated ? `Hola, ${currentUser?.firstName || 'Usuario'}` : 'Bienvenido'}
             </Text>
-            <Text style={[styles.titleText, { color: theme.colors.text.primary }]}>
+            <Text style={styles.titleText}>
               Panel Principal
             </Text>
           </View>
           
           <TouchableOpacity 
             style={styles.profileButton}
-            onPress={() => {
-              console.log('Navigate to profile');
-            }}
+            onPress={() => navigation.navigate('Profile')}
           >
             {currentUser?.avatar ? (
               <Image source={{ uri: currentUser.avatar }} style={styles.profileImage} />
@@ -287,9 +330,16 @@ export const HomeScreen: React.FC = () => {
             <Ionicons name="chevron-down" size={16} color={theme.colors.text.secondary} />
           </TouchableOpacity>
         )}
-      </View>
+      </LinearGradient>
 
-      {/* Summary Cards */}
+      <ScrollView 
+        style={[styles.scrollContainer, { backgroundColor: theme.colors.background.secondary }]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Summary Cards */}
       <View style={styles.summaryContainer}>
         <View style={[styles.summaryCard, { backgroundColor: theme.colors.primary }]}>
           <Text style={styles.summaryAmount}>${totalAmount.toFixed(2)}</Text>
@@ -343,7 +393,7 @@ export const HomeScreen: React.FC = () => {
           <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>
             Actividad Reciente
           </Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('Invoices')}>
             <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
               Ver todo
             </Text>
@@ -361,7 +411,10 @@ export const HomeScreen: React.FC = () => {
                   { borderBottomColor: theme.colors.border.light }
                 ]}
                 onPress={() => {
-                  console.log('Navigate to invoice detail:', invoice.id);
+                  navigation.navigate('Invoices', {
+                    screen: 'InvoiceDetail',
+                    params: { invoiceId: invoice.id }
+                  } as any);
                 }}
                 activeOpacity={0.7}
               >
@@ -404,9 +457,7 @@ export const HomeScreen: React.FC = () => {
               </Text>
               <TouchableOpacity 
                 style={[styles.createFirstButton, { backgroundColor: theme.colors.primary }]}
-                onPress={() => {
-                  console.log('Navigate to create invoice');
-                }}
+                onPress={() => navigation.navigate('Invoices')}
               >
                 <Text style={styles.createFirstButtonText}>Crear Primera Factura</Text>
               </TouchableOpacity>
@@ -414,23 +465,30 @@ export const HomeScreen: React.FC = () => {
           )}
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F8FAFC',
   },
-  header: {
+  scrollContainer: {
+    flex: 1,
+  },
+  gradientHeader: {
     paddingHorizontal: 20,
     paddingTop: 60, // Account for status bar
-    paddingBottom: 24,
+    paddingBottom: 32,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
   },
   headerContent: {
     flexDirection: 'row',
@@ -443,11 +501,15 @@ const styles = StyleSheet.create({
   },
   welcomeText: {
     fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
     marginBottom: 4,
   },
   titleText: {
     fontSize: 32,
     fontWeight: 'bold',
+    color: 'white',
+    letterSpacing: -0.5,
   },
   profileButton: {
     marginLeft: 16,
@@ -458,11 +520,14 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   profilePlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   profileInitials: {
     color: 'white',
@@ -491,12 +556,18 @@ const styles = StyleSheet.create({
   },
   summaryContainer: {
     paddingHorizontal: 20,
+    marginTop: -16,
     marginBottom: 32,
   },
   summaryCard: {
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
   },
   summaryCardPrimary: {
     backgroundColor: '#3B82F6',
@@ -544,52 +615,57 @@ const styles = StyleSheet.create({
   },
   actionCard: {
     width: (width - 52) / 2,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 6,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+    transform: [{ scale: 1 }],
   },
   actionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   actionEmoji: {
     fontSize: 24,
   },
   actionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
+    letterSpacing: -0.2,
   },
   actionSubtitle: {
     fontSize: 14,
     textAlign: 'center',
+    opacity: 0.8,
+    lineHeight: 18,
   },
   activityContainer: {
-    borderRadius: 16,
+    borderRadius: 20,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 6,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+    marginHorizontal: 4,
   },
   activityItem: {
-    padding: 16,
+    padding: 20,
   },
   activityItemBorder: {
     borderBottomWidth: 1,
@@ -624,13 +700,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    minWidth: 80,
+    alignItems: 'center',
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   emptyState: {
     padding: 40,

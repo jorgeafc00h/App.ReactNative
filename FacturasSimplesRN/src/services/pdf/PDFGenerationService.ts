@@ -2,12 +2,13 @@
 // Based on SwiftUI InvoicePDFGenerator implementation
 
 import { Platform } from 'react-native';
-// import RNPrint from 'react-native-print'; // Temporarily disabled
-// import * as FileSystem from 'expo-file-system'; // Temporarily disabled until expo-file-system issues are resolved
+import * as Print from 'expo-print';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import QRCode from 'qrcode';
-import { Invoice } from '../../types/invoice';
+import { Invoice, InvoiceType } from '../../types/invoice';
 import { Company } from '../../types/company';
-import { API_CONFIG } from '../../config/api';
+import { Customer } from '../../types/customer';
 
 export interface PDFGenerationResult {
   success: boolean;
@@ -121,6 +122,32 @@ export class PDFGenerationService {
   }
 
   /**
+   * Convert invoice type enum to string (matches Swift implementation)
+   */
+  private getInvoiceTypeString(invoiceType: InvoiceType): string {
+    switch (invoiceType) {
+      case InvoiceType.Factura:
+        return 'Factura';
+      case InvoiceType.CCF:
+        return 'CCF';
+      case InvoiceType.NotaCredito:
+        return 'NotaCredito';
+      case InvoiceType.SujetoExcluido:
+        return 'SujetoExcluido';
+      case InvoiceType.NotaDebito:
+        return 'NotaDebito';
+      case InvoiceType.NotaRemision:
+        return 'NotaRemision';
+      case InvoiceType.ComprobanteLiquidacion:
+        return 'ComprobanteLiquidacion';
+      case InvoiceType.FacturaExportacion:
+        return 'FacturaExportacion';
+      default:
+        return 'Factura';
+    }
+  }
+
+  /**
    * Split long text for PDF layout (matches Swift implementation)
    */
   private splitText(text: string, maxLength: number): string {
@@ -145,7 +172,7 @@ export class PDFGenerationService {
   /**
    * Generate PDF HTML content (matches Swift layout)
    */
-  private async generatePDFHTML(invoice: Invoice, company: Company): Promise<string> {
+  private async generatePDFHTML(invoice: Invoice, company: Company, customer?: Customer): Promise<string> {
     const qrUrl = this.generateQRUrl(invoice);
     const qrCodeDataUrl = await this.generateQRCode(qrUrl);
 
@@ -167,9 +194,12 @@ export class PDFGenerationService {
     const totalPagar = invoice.totals?.totalPagar || 0;
     const totalWithoutTax = invoice.totals?.totalWithoutTax || 0;
 
-    const customerDocumentNumber = (invoice.customer?.hasRetention && invoice.customer?.taxRegistrationNumber) 
-      ? invoice.customer.taxRegistrationNumber 
-      : invoice.customer?.nationalId || '';
+    const customerDocumentNumber = (customer?.hasContributorRetention && customer?.taxRegistrationNumber) 
+      ? customer.taxRegistrationNumber 
+      : customer?.nationalId || '';
+      
+    // Get retention flag from customer data
+    const hasRetention = customer?.hasContributorRetention || false;
 
     const totalInWords = this.numberToWords(totalPagar);
 
@@ -391,7 +421,7 @@ export class PDFGenerationService {
     <!-- Document Title -->
     <div class="document-title">
         <div class="title-main">DOCUMENTO TRIBUTARIO ELECTRÓNICO</div>
-        <div class="title-sub">${invoice.invoiceType === 'CCF' ? 'COMPROBANTE DE CRÉDITO FISCAL' : 'FACTURA'}</div>
+        <div class="title-sub">${invoice.invoiceType === InvoiceType.CCF ? 'COMPROBANTE DE CRÉDITO FISCAL' : 'FACTURA'}</div>
     </div>
 
     <!-- Metadata Section -->
@@ -444,11 +474,11 @@ export class PDFGenerationService {
             <div>
                 <div class="metadata-item">
                     <div class="label">Nombre ó Razón Social:</div>
-                    <div class="value">${invoice.customer ? `${invoice.customer.firstName} ${invoice.customer.lastName}` : 'N/A'}</div>
+                    <div class="value">${customer ? `${customer.firstName} ${customer.lastName}` : 'N/A'}</div>
                 </div>
                 <div class="metadata-item">
                     <div class="label">NRC:</div>
-                    <div class="value">${invoice.customer?.nrc || ''}</div>
+                    <div class="value">${customer?.nrc || ''}</div>
                 </div>
             </div>
             <div>
@@ -458,7 +488,7 @@ export class PDFGenerationService {
                 </div>
                 <div class="metadata-item">
                     <div class="label">Actividad Económica:</div>
-                    <div class="value">${this.splitText(invoice.customer?.descActividad || '', 35)}</div>
+                    <div class="value">${this.splitText(customer?.descActividad || '', 35)}</div>
                 </div>
             </div>
             <div>
@@ -468,7 +498,7 @@ export class PDFGenerationService {
                 </div>
                 <div class="metadata-item">
                     <div class="label">Dirección:</div>
-                    <div class="value">${this.splitText(invoice.customer?.address || '', 40)}</div>
+                    <div class="value">${this.splitText(customer?.address || '', 40)}</div>
                 </div>
             </div>
         </div>
@@ -567,11 +597,11 @@ export class PDFGenerationService {
                 </div>
                 <div class="summary-row">
                     <span>(-) IVA Retenido:</span>
-                    <span>${this.formatCurrency(invoice.customer?.hasRetention ? ivaRete1 : 0)}</span>
+                    <span>${this.formatCurrency(hasRetention ? ivaRete1 : 0)}</span>
                 </div>
                 <div class="summary-row">
                     <span>(-) Retención Renta:</span>
-                    <span>${this.formatCurrency(invoice.invoiceType === 'SujetoExcluido' ? reteRenta : 0)}</span>
+                    <span>${this.formatCurrency(invoice.invoiceType === InvoiceType.SujetoExcluido ? reteRenta : 0)}</span>
                 </div>
                 <div class="summary-row">
                     <span>Monto Total de la Operación:</span>
@@ -602,32 +632,44 @@ export class PDFGenerationService {
    * Generate PDF from invoice and company data
    * Main PDF generation method matching Swift functionality
    */
-  async generatePDF(invoice: Invoice, company: Company): Promise<PDFGenerationResult> {
+  async generatePDF(invoice: Invoice, company: Company, customer?: Customer): Promise<PDFGenerationResult> {
     try {
       console.log('📄 PDFGenerationService: Generating PDF for invoice:', invoice.invoiceNumber);
 
       // Generate HTML content
-      const htmlContent = await this.generatePDFHTML(invoice, company);
+      const htmlContent = await this.generatePDFHTML(invoice, company, customer);
       
-      // Generate PDF using react-native-print
+      // Generate PDF using expo-print
       const options = {
         html: htmlContent,
-        fileName: `${invoice.invoiceType}-${invoice.invoiceNumber}.pdf`,
         base64: true,
+        width: 612,
+        height: 792,
+        margins: {
+          left: 30,
+          top: 30,
+          right: 30,
+          bottom: 30,
+        },
       };
 
-      // TODO: Implement PDF generation when compatible library is available
-      console.log('📄 PDFGenerationService: PDF generation temporarily disabled');
+      console.log('📄 PDFGenerationService: Generating PDF with expo-print');
+      const result = await Print.printToFileAsync(options);
       
-      // Placeholder return for now
-      const mockPdfData = 'UERGIGdlbmVyYXRpb24gdGVtcG9yYXJpbHkgZGlzYWJsZWQ='; // Mock base64
+      // Read the generated PDF as base64
+      const pdfData = await FileSystem.readAsStringAsync(result.uri, {
+        encoding: 'base64',
+      });
+
+      const fileName = `${this.getInvoiceTypeString(invoice.invoiceType)}-${invoice.invoiceNumber}.pdf`;
       
+      console.log('✅ PDFGenerationService: PDF generated successfully');
       return {
         success: true,
-        filePath: '/tmp/mock.pdf',
-        fileName: options.fileName,
-        pdfData: mockPdfData,
-        message: 'PDF generation temporarily disabled - using mock data',
+        filePath: result.uri,
+        fileName,
+        pdfData,
+        message: 'PDF generated successfully',
       };
     } catch (error) {
       console.error('❌ PDFGenerationService: PDF generation failed:', error);
@@ -643,21 +685,25 @@ export class PDFGenerationService {
    * Generate and save PDF to device storage
    * Matches Swift's generateAndSavePDF functionality
    */
-  async generateAndSavePDF(invoice: Invoice, company: Company): Promise<PDFGenerationResult> {
+  async generateAndSavePDF(invoice: Invoice, company: Company, customer?: Customer): Promise<PDFGenerationResult> {
     try {
       // Generate PDF
-      const result = await this.generatePDF(invoice, company);
+      const result = await this.generatePDF(invoice, company, customer);
       
       if (!result.success || !result.pdfData) {
         throw new Error(result.message || 'PDF generation failed');
       }
 
-      // Create a permanent file path (temporarily disabled)
+      // Create a permanent file path using expo-file-system
       const fileName = `Factura-${invoice.invoiceNumber}.pdf`;
-      const filePath = `/tmp/${fileName}`; // Mock path
+      const documentsDirectory = FileSystem.cacheDirectory!;
+      const filePath = `${documentsDirectory}${fileName}`;
       
-      // TODO: Re-enable file system operations when expo-file-system is properly configured
-      console.log('💾 PDFGenerationService: PDF file operations temporarily disabled');
+      // Copy the temporary PDF to permanent location
+      if (result.filePath) {
+        await FileSystem.copyAsync(result.filePath, filePath);
+        console.log('💾 PDFGenerationService: PDF saved to permanent location');
+      }
 
       return {
         success: true,
@@ -683,28 +729,34 @@ export class PDFGenerationService {
   async sharePDF(
     invoice: Invoice, 
     company: Company, 
+    customer?: Customer,
     options: PDFShareOptions = {}
   ): Promise<PDFGenerationResult> {
     try {
       console.log('📤 PDFGenerationService: Sharing PDF');
 
       // Generate PDF
-      const result = await this.generatePDF(invoice, company);
+      const result = await this.generatePDF(invoice, company, customer);
       
       if (!result.success || !result.filePath) {
         throw new Error(result.message || 'PDF generation failed');
       }
 
-      // Share using RNPrint's share functionality
+      // Share using expo-sharing
       const shareOptions = {
         fileName: options.fileName || `${invoice.controlNumber || invoice.invoiceNumber}.pdf`,
         subject: options.subject || `Factura ${invoice.invoiceNumber}`,
         body: options.body || `Adjunto factura ${invoice.invoiceNumber}`,
       };
 
-      // TODO: Implement PDF sharing when compatible library is available
-      console.log('📄 PDFGenerationService: PDF sharing temporarily disabled');
-      console.log('ℹ️  Would share:', result.filePath, 'with options:', shareOptions);
+      // Share using expo-sharing
+      if (result.filePath) {
+        await Sharing.shareAsync(result.filePath, {
+          mimeType: 'application/pdf',
+          dialogTitle: shareOptions.subject,
+        });
+        console.log('✅ PDFGenerationService: PDF shared successfully');
+      }
 
       return {
         ...result,
@@ -723,11 +775,11 @@ export class PDFGenerationService {
   /**
    * Preview PDF in a modal (for UI integration)
    */
-  async previewPDF(invoice: Invoice, company: Company): Promise<PDFGenerationResult> {
+  async previewPDF(invoice: Invoice, company: Company, customer?: Customer): Promise<PDFGenerationResult> {
     try {
       console.log('👁️ PDFGenerationService: Preparing PDF preview');
 
-      const result = await this.generatePDF(invoice, company);
+      const result = await this.generatePDF(invoice, company, customer);
       
       if (!result.success) {
         throw new Error(result.message || 'PDF generation failed');
@@ -756,10 +808,14 @@ export class PDFGenerationService {
       console.log('💾 PDFGenerationService: Saving PDF from data');
 
       const fileName = `Factura-${invoiceNumber}.pdf`;
-      const filePath = `/tmp/${fileName}`; // Mock path
+      const documentsDirectory = FileSystem.cacheDirectory!;
+      const filePath = `${documentsDirectory}${fileName}`;
       
-      // TODO: Re-enable file system operations when expo-file-system is properly configured
-      console.log('✅ PDFGenerationService: PDF file operations temporarily disabled');
+      // Write PDF data to file
+      await FileSystem.writeAsStringAsync(filePath, pdfData, {
+        encoding: 'base64',
+      });
+      console.log('✅ PDFGenerationService: PDF saved from data successfully');
 
       return {
         success: true,
@@ -783,8 +839,11 @@ export class PDFGenerationService {
    */
   async cleanupTemporaryPDF(filePath: string): Promise<void> {
     try {
-      // TODO: Re-enable file system operations when expo-file-system is properly configured
-      console.log('🧹 PDFGenerationService: File cleanup temporarily disabled');
+      const fileInfo = await FileSystem.getInfoAsync(filePath);
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(filePath);
+        console.log('🧹 PDFGenerationService: Temporary PDF cleaned up successfully');
+      }
     } catch (error) {
       console.warn('⚠️ PDFGenerationService: Failed to cleanup temporary PDF:', error);
     }

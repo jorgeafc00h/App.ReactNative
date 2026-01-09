@@ -17,9 +17,13 @@ import { RootState } from '../../store';
 import { updateInvoice } from '../../store/slices/invoiceSlice';
 import { Invoice, InvoiceType } from '../../types/invoice';
 import { Company } from '../../types/company';
+import { Customer } from '../../types/customer';
 import { InvoiceService } from '../../services/api/InvoiceService';
+import { getApiConfig } from '../../config/api';
 import { getCertificateService } from '../../services/security/CertificateService';
 import { DTE_Base, DTEResponseWrapper, ServiceCredentials } from '../../types/dte';
+import { isProductionCompany } from '../../utils/companyEnvironment';
+import { optionalString } from '../../utils/json';
 
 interface DTESubmissionModalProps {
   visible: boolean;
@@ -53,7 +57,10 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
 }) => {
   const dispatch = useDispatch();
   const selectedCompany = useSelector((state: RootState) => state.companies.currentCompany);
-  const isProduction = useSelector((state: RootState) => state.app.environment === 'production');
+  const customers = useSelector((state: RootState) => state.customers.customers);
+  // Use company-specific environment (matches Swift).
+  // IMPORTANT: never default to PROD when `isTestAccount` is missing.
+  const isProduction = isProductionCompany(selectedCompany);
 
   const [invoiceService] = useState(() => new InvoiceService(isProduction));
   const [certificateService] = useState(() => getCertificateService(isProduction));
@@ -66,6 +73,14 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
   
   const [dteResponse, setDteResponse] = useState<DTEResponseWrapper | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (__DEV__ && selectedCompany) {
+      console.log(
+        `🏭 DTE: company env=${selectedCompany.environment} isTestAccount=${selectedCompany.isTestAccount} => isProduction=${isProduction}`
+      );
+    }
+  }, [selectedCompany, isProduction]);
 
   // Update services environment when it changes
   useEffect(() => {
@@ -100,20 +115,26 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
   const startSubmission = async () => {
     if (!invoice || !selectedCompany) return;
 
+    const nit = selectedCompany.nit;
+    if (!nit) {
+      Alert.alert('Error', 'La empresa seleccionada no tiene NIT configurado.');
+      return;
+    }
+
     setSubmitting(true);
     
     try {
       // Step 1: Validate Certificate (20%)
       updateProgress('validating-certificate', 'Validando certificado digital...', 20);
       
-      const certificatePassword = await certificateService.getCertificatePassword(selectedCompany.nit);
+      const certificatePassword = await certificateService.getCertificatePassword(nit);
       
       if (!certificatePassword) {
         throw new Error('No se encontró certificado configurado para esta empresa. Configure su certificado digital primero.');
       }
 
       const certValidation = await certificateService.validateCertificate(
-        selectedCompany.nit,
+        nit,
         certificatePassword
       );
 
@@ -126,8 +147,8 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
       
       const dte = await prepareDTEFromInvoice(invoice, selectedCompany);
       const credentials: ServiceCredentials = {
-        user: selectedCompany.nit,
-        credential: selectedCompany.mhCredential || '',
+        user: nit,
+        credential: selectedCompany.credentials || '',
         key: certificatePassword,
         invoiceNumber: invoice.invoiceNumber || '',
       };
@@ -150,7 +171,7 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
         await invoiceService.uploadPDF(
           pdfData,
           response.codigoGeneracion || invoice.invoiceNumber || '',
-          selectedCompany.nit
+          nit
         );
       }
 
@@ -158,15 +179,14 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
       updateProgress('completed', '¡Factura enviada exitosamente!', 100);
       
       // Update invoice with DTE response data
-      const updatedInvoice: Invoice = {
-        ...invoice,
-        generationCode: response.codigoGeneracion || '',
-        controlNumber: response.codigoGeneracion || '', // Using generation code as control number
-        receptionSeal: response.selloRecibido || '',
-        status: 2, // InvoiceStatus.Completada
-      };
-
-      dispatch(updateInvoice(updatedInvoice));
+      dispatch(
+        updateInvoice({
+          id: invoice.id,
+          generationCode: response.codigoGeneracion || '',
+          receptionSeal: response.selloRecibido || '',
+          status: 2,
+        })
+      );
 
       // Notify success after a brief delay to show completion
       setTimeout(() => {
@@ -191,13 +211,46 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
     // Implementation matches SwiftUI DTEGenerator logic
     
     const currentDate = new Date();
+    const environmentCode = getApiConfig(isProduction).environmentCode;
+
+    const tipoDte = getDocumentTypeFromInvoiceType(invoice.invoiceType);
+    const version = getVersionFromInvoiceType(invoice.invoiceType);
+
+    const customer: Customer | undefined = invoice.customerId
+      ? customers.find((c) => c.id === invoice.customerId)
+      : undefined;
+
+    // Swift always maps a receptor. In RN we must derive it from customerId.
+    if (!customer) {
+      throw new Error(
+        'Esta factura no tiene cliente asignado o el cliente no existe. Seleccione un cliente antes de enviar a Hacienda.'
+      );
+    }
+
+    const receptor = buildReceptor(invoice.invoiceType, customer);
+
+    const roundTo = (value: number, decimals: number): number => {
+      const factor = Math.pow(10, decimals);
+      return Math.round((value + Number.EPSILON) * factor) / factor;
+    };
+
+    if (!invoice.totals) {
+      throw new Error(
+        'No se pudieron calcular los totales de la factura. Reintente o edite la factura antes de enviar a Hacienda.'
+      );
+    }
+
+    const numeroControl = generateControlNumber(tipoDte, company, invoice);
+    const codigoGeneracion = invoice.generationCode || generateUUID();
+
     const dte: DTE_Base = {
       identificacion: {
-        version: 1,
-        ambiente: isProduction ? '00' : '01', // 00 = Production, 01 = Test
-        tipoDte: getDTEType(invoice.invoiceType),
-        numeroControl: generateControlNumber(),
-        codigoGeneracion: generateUUID(),
+        version,
+        // Must match Swift + backend expectations: production='01', development='00'
+        ambiente: environmentCode,
+        tipoDte,
+        numeroControl,
+        codigoGeneracion,
         tipoModelo: 1, // Previo
         tipoOperacion: 1, // Normal
         fecEmi: currentDate.toISOString().split('T')[0],
@@ -205,92 +258,253 @@ export const DTESubmissionModal: React.FC<DTESubmissionModalProps> = ({
         tipoMoneda: 'USD',
       },
       emisor: {
-        nit: company.nit,
-        nrc: company.nrc,
-        nombre: company.nombreComercial,
+        nit: company.nit ?? '',
+        nrc: company.nrc ?? '',
+        nombre: company.nombre,
+        nombreComercial: company.nombreComercial,
         codActividad: company.codActividad || '47111',
-        descActividad: company.descActividad || 'Venta al por menor',
-        tipoEstablecimiento: company.establecimiento || '01',
+        descActividad: optionalString(company.descActividad),
+        // In Swift this is a code (company.tipoEstablecimiento), not the display name
+        tipoEstablecimiento: company.tipoEstablecimiento || '01',
         direccion: {
-          departamento: company.departamento || '06', // San Salvador
-          municipio: company.municipio || '05', // San Salvador
+          departamento: company.departamentoCode || '06',
+          municipio: company.municipioCode || '05',
           complemento: company.complemento || company.direccion || '',
         },
         telefono: company.telefono || '',
         correo: company.correo || '',
+        codEstableMH: optionalString(company.codEstableMH),
+        codEstable: optionalString(company.codEstable),
+        codPuntoVentaMH: optionalString(company.codPuntoVentaMH),
+        codPuntoVenta: optionalString(company.codPuntoVenta),
+
+        // Export-specific required field (backend expects this when tipoDte="11")
+        ...(tipoDte === '11'
+          ? {
+              tipoItemExpor: 1,
+              recintoFiscal: undefined,
+              regimen: undefined,
+            }
+          : {}),
       },
-      receptor: invoice.customer ? {
-        nombre: `${invoice.customer.firstName} ${invoice.customer.lastName}`,
-        numDocumento: invoice.customer.nationalId,
-        nrc: invoice.customer.nrc,
-        direccion: invoice.customer.address ? {
-          departamento: '06', // Default to San Salvador
-          municipio: '05',
-          complemento: invoice.customer.address,
-        } : undefined,
-        telefono: invoice.customer.phone,
-        correo: invoice.customer.email,
-      } : undefined,
-      cuerpoDocumento: invoice.items?.map((item, index) => ({
-        numItem: index + 1,
-        tipoItem: 2, // Producto
-        cantidad: item.quantity,
-        uniMedida: 99, // Unidad
-        descripcion: item.productName || `Item ${index + 1}`,
-        precioUni: item.unitPrice,
-        montoDescu: 0,
-        ventaNoSuj: 0,
-        ventaExenta: 0,
-        ventaGravada: item.quantity * item.unitPrice,
-      })) || [],
+      receptor,
+      cuerpoDocumento: invoice.items?.map((item, index) => {
+        const isCCF = invoice.invoiceType === InvoiceType.CCF;
+        const productTotal = Number(item.quantity) * Number(item.unitPrice);
+        const tax = roundTo(productTotal - productTotal / 1.13, 2);
+        const precioUni = isCCF
+          ? roundTo(Number(item.unitPrice) / 1.13, 2)
+          : roundTo(Number(item.unitPrice), 8);
+
+        return {
+          numItem: index + 1,
+          tipoItem: 2, // 1 producto, 2 servicios (Swift uses 2)
+          numeroDocumento: undefined,
+          cantidad: item.quantity,
+          codigo: isCCF ? undefined : '1',
+          codTributo: undefined,
+          uniMedida: isCCF ? 59 : 99,
+          descripcion: item.productName || `Item ${index + 1}`,
+          precioUni,
+          montoDescu: 0,
+          ventaNoSuj: 0,
+          ventaExenta: 0,
+          ventaGravada: isCCF ? roundTo(productTotal - tax, 2) : roundTo(productTotal, 2),
+          psv: 0,
+          noGravado: 0,
+          ivaItem: isCCF ? undefined : tax,
+        };
+      }) || [],
       resumen: {
         totalNoSuj: 0,
         totalExenta: 0,
-        totalGravada: invoice.totals?.subTotal || 0,
-        subTotalVentas: invoice.totals?.subTotal || 0,
+        // Swift uses totalWithoutTax for CCF, otherwise totalAmount
+        totalGravada: invoice.totals.isCCF ? invoice.totals.totalWithoutTax : invoice.totals.totalAmount,
+        subTotalVentas: invoice.totals.isCCF ? invoice.totals.totalWithoutTax : invoice.totals.totalAmount,
         descuNoSuj: 0,
         descuExenta: 0,
         descuGravada: 0,
         porcentajeDescuento: 0,
         totalDescu: 0,
-        subTotal: invoice.totals?.subTotal || 0,
-        montoTotalOperacion: invoice.totals?.totalAmount || 0,
+        subTotal: invoice.totals.subTotal || 0,
+        ivaRete1: customer.hasContributorRetention ? (invoice.totals.ivaRete1 || 0) : 0,
+        reteRenta: 0,
+        montoTotalOperacion: invoice.totals.totalAmount || 0,
         totalNoGravado: 0,
-        totalPagar: invoice.totals?.totalPagar || 0,
-        totalLetras: convertNumberToWords(invoice.totals?.totalPagar || 0),
+        totalPagar: invoice.totals.totalPagar || 0,
+        totalLetras: convertNumberToWords(invoice.totals.totalPagar || 0),
+        totalIva: invoice.totals.tax || 0,
+        saldoFavor: 0,
         condicionOperacion: 1, // Contado
-        pagos: [{
-          codigo: '01', // Efectivo
-          montoPago: invoice.totals?.totalPagar || 0,
-        }],
+        pagos: tipoDte === '11'
+          ? [{
+              codigo: '05',
+              montoPago: invoice.totals.totalAmount || 0,
+              referencia: '',
+            }]
+          : undefined,
+
+        ...(tipoDte === '11'
+          ? {
+              descuento: 0,
+              seguro: 0,
+              flete: 0,
+              codIncoterms: undefined,
+              descIncoterms: undefined,
+              observaciones: '',
+              // Swift export resumen sets totalIva=nil
+              totalIva: undefined,
+            }
+          : {}),
       },
     };
 
-    // Add tax information if CCF
-    if (invoice.invoiceType === InvoiceType.CCF && invoice.totals?.tax) {
+    // Swift sets `documentoRelacionado=nil` for Factura; never send an empty array.
+    if (tipoDte === '01') {
+      dte.documentoRelacionado = undefined;
+    }
+
+    // Add tax information if CCF (matches Swift mapResumen)
+    if (invoice.invoiceType === InvoiceType.CCF && invoice.totals.tax) {
       dte.resumen.tributos = [{
         codigo: '20',
         descripcion: 'Impuesto al Valor Agregado 13%',
         valor: invoice.totals.tax,
       }];
+    } else {
+      dte.resumen.tributos = undefined;
     }
 
     return dte;
   };
 
-  const getDTEType = (invoiceType: InvoiceType): string => {
+  // Matches Swift Extensions.documentTypeFromInvoiceType
+  const getDocumentTypeFromInvoiceType = (invoiceType: InvoiceType): string => {
     switch (invoiceType) {
-      case InvoiceType.CCF: return '08'; // Comprobante de Crédito Fiscal
-      case InvoiceType.SujetoExcluido: return '14'; // Sujeto Excluido
-      default: return '11'; // Factura
+      case InvoiceType.Factura: return '01';
+      case InvoiceType.CCF: return '03';
+      case InvoiceType.NotaRemision: return '04';
+      case InvoiceType.NotaCredito: return '05';
+      case InvoiceType.NotaDebito: return '06';
+      case InvoiceType.ComprobanteLiquidacion: return '08';
+      case InvoiceType.FacturaExportacion: return '11';
+      case InvoiceType.SujetoExcluido: return '14';
+      default: return '01';
     }
   };
 
-  const generateControlNumber = (): string => {
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const random = Math.floor(Math.random() * 100000000).toString().padStart(8, '0');
-    return `DTE-${year}-${random}`;
+  // Matches Swift version rules in MHService.swift
+  const getVersionFromInvoiceType = (invoiceType: InvoiceType): number => {
+    switch (invoiceType) {
+      case InvoiceType.Factura:
+      case InvoiceType.FacturaExportacion:
+      case InvoiceType.ComprobanteLiquidacion:
+      case InvoiceType.SujetoExcluido:
+        return 1;
+      default:
+        return 3;
+    }
+  };
+
+  const buildReceptor = (invoiceType: InvoiceType, customer: Customer) => {
+    const nombre = customer.businessName || `${customer.firstName} ${customer.lastName}`;
+
+    const formatNationalId = (value: string | undefined): string | undefined => {
+      if (!value) return undefined;
+      const digits = value.replace(/\D/g, '');
+      if (digits.length === 9) {
+        return `${digits.slice(0, 8)}-${digits.slice(8)}`;
+      }
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    };
+
+    // Basic doc mapping: NIT ("36") preferred if present, otherwise DUI ("13")
+    const hasNit = !!customer.nit && customer.nit.trim().length > 0;
+    const hasDui = !!customer.nationalId && customer.nationalId.trim().length > 0;
+
+    // Swift's `hasInvoiceSettings` corresponds to the customer being a business.
+    const hasInvoiceSettings = customer.customerType === 1;
+
+    const isCCF = invoiceType === InvoiceType.CCF;
+    const requiredNitForFactura = invoiceType === InvoiceType.Factura && hasNit && hasInvoiceSettings;
+
+    const tipoDocumento = invoiceType === InvoiceType.FacturaExportacion
+      ? (optionalString(customer.tipoDocumento) || (hasNit ? '36' : hasDui ? '13' : '37'))
+      : isCCF
+        ? undefined
+        : requiredNitForFactura
+          ? '36'
+          : (invoiceType === InvoiceType.Factura && hasDui ? '13' : undefined);
+
+    const numDocumento = invoiceType === InvoiceType.FacturaExportacion
+      ? (tipoDocumento === '36'
+          ? optionalString(customer.nit)
+          : (tipoDocumento === '13'
+              ? formatNationalId(customer.nationalId)
+              : optionalString(customer.nationalId)))
+      : isCCF
+        ? undefined
+        : requiredNitForFactura
+          ? optionalString(customer.nit)
+          : formatNationalId(customer.nationalId);
+
+    return {
+      nombre,
+      // Swift only includes these for CCF.
+      nombreComercial: isCCF ? optionalString(customer.businessName) : undefined,
+      nrc: isCCF ? optionalString(customer.nrc) : undefined,
+      tipoDocumento,
+      numDocumento,
+      correo: optionalString(customer.email),
+      telefono: optionalString(customer.phone),
+      direccion: customer.address
+        ? {
+            departamento: customer.departmentCode || '06',
+            municipio: customer.municipalityCode || '05',
+            complemento: customer.address,
+          }
+        : undefined,
+
+      ...(isCCF
+        ? {
+            nit: optionalString(customer.nit),
+            codActividad: optionalString(customer.codActividad),
+            descActividad: optionalString(customer.descActividad),
+          }
+        : {}),
+
+      ...(invoiceType === InvoiceType.FacturaExportacion
+        ? {
+            codPais: customer.codPais || 'US',
+            nombrePais: customer.nombrePais || 'Estados Unidos',
+            tipoPersona: customer.tipoPersona ? Number(customer.tipoPersona) || 1 : 1,
+            descActividad: optionalString(customer.descActividad),
+            complemento: customer.address,
+          }
+        : {}),
+    };
+  };
+
+  const generateControlNumber = (
+    tipoDte: string,
+    company: Company,
+    invoice: Invoice
+  ): string => {
+    // Match Swift `Extensions.generateString(baseString:codEstableMH:codPuntoVentaMH:)`:
+    // `${baseString}-${codEstableMH}${codPuntoVentaMH}-${15 random digits}`
+    const baseString = `DTE-${tipoDte}`;
+    const codEstableMH = optionalString(company.codEstableMH) || 'M001';
+    const codPuntoVentaMH = optionalString(company.codPuntoVentaMH) || 'P001';
+    const establishmentCode = `${codEstableMH}${codPuntoVentaMH}`;
+
+    const existing = optionalString(invoice.controlNumber);
+    if (existing && existing.startsWith(baseString)) {
+      return existing;
+    }
+
+    const numericPart = Array.from({ length: 15 }, () => Math.floor(Math.random() * 10).toString()).join('');
+    return `${baseString}-${establishmentCode}-${numericPart}`;
   };
 
   const generateUUID = (): string => {
@@ -583,7 +797,6 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 4,
-    transition: 'width 0.3s ease',
   },
   errorContainer: {
     marginTop: 15,

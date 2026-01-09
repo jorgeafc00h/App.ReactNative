@@ -49,7 +49,8 @@ export const InvoiceDetailScreenEnhanced: React.FC = () => {
   const { invoiceId } = route.params;
   const { currentInvoice, loading, invoices } = useAppSelector(state => state.invoices);
   const { currentCompany } = useAppSelector(state => state.companies);
-  const isProduction = useAppSelector(state => state.app?.environment === 'production') ?? false;
+  // Use company-specific environment, not global app environment (matches Swift)
+  const isProduction = currentCompany?.environment === 'PRODUCTION' && currentCompany?.isTestAccount !== true;
   
   // Get customer information for the current invoice
   const customerSelector = useMemo(

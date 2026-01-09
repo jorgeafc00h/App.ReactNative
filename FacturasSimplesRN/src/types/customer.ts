@@ -41,8 +41,10 @@ export interface Customer {
   documentTypeCatalogCode?: string;
   taxRegistrationNumber?: string;
   nrc?: string;
-  // Export information fields
+  // Export information fields (matches Swift hasExportInvoiceSettings section)
+  hasExportInvoiceSettings?: boolean;
   codPais?: string;
+  nombrePais?: string;
   tipoPersona?: string;
   tipoDocumento?: string;
   shouldSyncToCloud?: boolean;
@@ -75,8 +77,10 @@ export interface CreateCustomerInput {
   taxRegistrationNumber?: string;
   nrc?: string;
   documentTypeCatalogCode?: string;
-  // Export information fields
+  // Export information fields (matches Swift hasExportInvoiceSettings)
+  hasExportInvoiceSettings?: boolean;
   codPais?: string;
+  nombrePais?: string;
   tipoPersona?: string;
   tipoDocumento?: string;
   shouldSyncToCloud?: boolean;

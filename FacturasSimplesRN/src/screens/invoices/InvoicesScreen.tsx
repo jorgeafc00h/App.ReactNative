@@ -9,6 +9,7 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -390,7 +391,10 @@ export const InvoicesScreen: React.FC = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+    <SafeAreaView
+      edges={['top']}
+      style={[styles.container, { backgroundColor: theme.colors.background.primary }]}
+    >
       <StatusBar style={theme.isDark ? 'light' : 'dark'} />
       
       {/* Header */}
@@ -475,7 +479,13 @@ export const InvoicesScreen: React.FC = () => {
 
       {/* Search Suggestions Dropdown */}
       {showSearchSuggestions && searchSuggestions.length > 0 && (
-        <View style={[styles.suggestionsContainer, { backgroundColor: theme.colors.surface.primary, borderColor: theme.colors.border.light }]}>
+        <View
+          pointerEvents={showSearchSuggestions ? 'auto' : 'none'}
+          style={[
+            styles.suggestionsContainer,
+            { backgroundColor: theme.colors.surface.primary, borderColor: theme.colors.border.light },
+          ]}
+        >
           {searchSuggestions.map((suggestion) => (
             <TouchableOpacity
               key={suggestion.id}
@@ -583,7 +593,7 @@ export const InvoicesScreen: React.FC = () => {
           </>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -596,7 +606,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 12,
     paddingBottom: 16,
   },
   title: {
@@ -672,7 +682,8 @@ const styles = StyleSheet.create({
   },
   suggestionsContainer: {
     position: 'absolute',
-    top: 180,
+    // Keep this below the header/search controls so it doesn't block taps.
+    top: 190,
     left: 20,
     right: 20,
     zIndex: 1000,

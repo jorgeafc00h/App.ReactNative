@@ -9,6 +9,7 @@ import {
   CatalogCollection,
   GovernmentCatalogId 
 } from '../../types/catalog';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export class CatalogService {
   private httpClient: HttpClient;
@@ -50,9 +51,24 @@ export class CatalogService {
 
   /**
    * Get a specific catalog by ID
+   * Optionally accepts cached catalogs to avoid API call
    */
-  async getCatalogById(catalogId: string): Promise<Catalog | null> {
+  async getCatalogById(
+    catalogId: string, 
+    cachedCatalogs?: Catalog[]
+  ): Promise<Catalog | null> {
     try {
+      // First try to find in cached catalogs if provided
+      if (cachedCatalogs && cachedCatalogs.length > 0) {
+        const cachedCatalog = cachedCatalogs.find(catalog => catalog.id === catalogId);
+        if (cachedCatalog) {
+          console.log(`📋 CatalogService: Found ${catalogId} in cache`);
+          return cachedCatalog;
+        }
+      }
+      
+      // If not in cache or no cache provided, fetch from API
+      console.log(`📋 CatalogService: Fetching ${catalogId} from API`);
       const catalogs = await this.getCatalogs();
       return catalogs.find(catalog => catalog.id === catalogId) || null;
     } catch (error) {
@@ -63,14 +79,16 @@ export class CatalogService {
 
   /**
    * Search catalog options
+   * Optionally accepts cached catalogs to avoid API call
    */
   async searchCatalogOptions(
     catalogId: string, 
     searchTerm: string,
-    departamento?: string
+    departamento?: string,
+    cachedCatalogs?: Catalog[]
   ): Promise<CatalogOption[]> {
     try {
-      const catalog = await this.getCatalogById(catalogId);
+      const catalog = await this.getCatalogById(catalogId, cachedCatalogs);
       if (!catalog) {
         return [];
       }
@@ -102,13 +120,18 @@ export class CatalogService {
 
   /**
    * Get municipalities for a specific department
+   * Optionally accepts cached catalogs to avoid API call
    */
-  async getMunicipalitiesByDepartment(departmentCode: string): Promise<CatalogOption[]> {
+  async getMunicipalitiesByDepartment(
+    departmentCode: string,
+    cachedCatalogs?: Catalog[]
+  ): Promise<CatalogOption[]> {
     try {
       return await this.searchCatalogOptions(
         GovernmentCatalogId.MUNICIPALITIES,
         '',
-        departmentCode
+        departmentCode,
+        cachedCatalogs
       );
     } catch (error) {
       console.error(`❌ CatalogService: Failed to get municipalities for department ${departmentCode}`, error);
@@ -118,10 +141,11 @@ export class CatalogService {
 
   /**
    * Get all departments
+   * Optionally accepts cached catalogs to avoid API call
    */
-  async getDepartments(): Promise<CatalogOption[]> {
+  async getDepartments(cachedCatalogs?: Catalog[]): Promise<CatalogOption[]> {
     try {
-      const catalog = await this.getCatalogById(GovernmentCatalogId.DEPARTMENTS);
+      const catalog = await this.getCatalogById(GovernmentCatalogId.DEPARTMENTS, cachedCatalogs);
       return catalog?.options || [];
     } catch (error) {
       console.error('❌ CatalogService: Failed to get departments', error);
@@ -235,10 +259,15 @@ export class CatalogService {
 
   /**
    * Find a specific catalog option by code
+   * Optionally accepts cached catalogs to avoid API call
    */
-  async findOptionByCode(catalogId: string, code: string): Promise<CatalogOption | null> {
+  async findOptionByCode(
+    catalogId: string, 
+    code: string,
+    cachedCatalogs?: Catalog[]
+  ): Promise<CatalogOption | null> {
     try {
-      const catalog = await this.getCatalogById(catalogId);
+      const catalog = await this.getCatalogById(catalogId, cachedCatalogs);
       if (!catalog) {
         return null;
       }
@@ -271,18 +300,36 @@ export class CatalogService {
 
   /**
    * Check if catalogs are available offline
+   * Checks Redux store for existing catalogs
    */
   isAvailableOffline(): boolean {
-    // TODO: Check local storage for cached catalogs
+    // This method would need access to Redux store
+    // For now, we'll implement this logic in the Redux slice
     return false;
   }
 
   /**
    * Get cached catalogs (offline mode)
+   * Returns catalogs from Redux store (to be implemented in Redux slice)
    */
   async getCachedCatalogs(): Promise<Catalog[]> {
-    // TODO: Implement local cache retrieval
+    // This method would need access to Redux store
+    // For now, we'll implement this logic in the Redux slice
     return [];
+  }
+
+  /**
+   * Update last sync date after successful sync
+   * Matches Swift saveLastSyncDate() implementation
+   */
+  async updateLastSyncDate(): Promise<void> {
+    try {
+      const now = new Date();
+      await AsyncStorage.setItem('CatalogLastSyncDate', now.toISOString());
+      console.log(`📋 CatalogService: Last sync date updated to ${now.toISOString()}`);
+    } catch (error) {
+      console.error('❌ CatalogService: Failed to update last sync date', error);
+    }
   }
 
   /**
@@ -312,12 +359,29 @@ export class CatalogService {
 
   /**
    * Check if catalog sync is needed (based on 24-hour refresh cycle)
+   * Matches Swift CatalogSyncService.shouldSync() implementation
    */
   async shouldSync(): Promise<boolean> {
     try {
-      // TODO: Implement actual sync check logic
-      // For now, return true to always sync when requested
-      return true;
+      const lastSyncDateStr = await AsyncStorage.getItem('CatalogLastSyncDate');
+      
+      if (!lastSyncDateStr) {
+        console.log('📋 CatalogService: No last sync date found, sync needed');
+        return true;
+      }
+      
+      const lastSyncDate = new Date(lastSyncDateStr);
+      const hoursSinceLastSync = (Date.now() - lastSyncDate.getTime()) / (1000 * 60 * 60);
+      
+      const shouldSync = hoursSinceLastSync > 24;
+      
+      if (shouldSync) {
+        console.log(`📋 CatalogService: Last sync was ${hoursSinceLastSync.toFixed(1)} hours ago, sync needed`);
+      } else {
+        console.log(`📋 CatalogService: Last sync was ${hoursSinceLastSync.toFixed(1)} hours ago, sync not needed`);
+      }
+      
+      return shouldSync;
     } catch (error) {
       console.error('❌ CatalogService: Failed to check if sync is needed', error);
       return true; // Default to sync if we can't determine

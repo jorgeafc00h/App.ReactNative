@@ -57,11 +57,12 @@ const CustomerForm: React.FC = () => {
   const [descActividad, setDescActividad] = useState(existing?.descActividad ?? '');
   const [hasContributorRetention, setHasContributorRetention] = useState(existing?.hasContributorRetention ?? false);
   
-  // Export info
-  const [hasExportInvoiceSettings, setHasExportInvoiceSettings] = useState(false);
-  const [codPais, setCodPais] = useState('');
-  const [tipoPersona, setTipoPersona] = useState('');
-  const [tipoDocumento, setTipoDocumento] = useState('');
+  // Export info (matches Swift FacturaExportacionSection)
+  const [hasExportInvoiceSettings, setHasExportInvoiceSettings] = useState(existing?.hasExportInvoiceSettings ?? false);
+  const [codPais, setCodPais] = useState(existing?.codPais ?? '');
+  const [nombrePais, setNombrePais] = useState(existing?.nombrePais ?? '');
+  const [tipoPersona, setTipoPersona] = useState(existing?.tipoPersona ?? '');
+  const [tipoDocumento, setTipoDocumento] = useState(existing?.tipoDocumento ?? '');
 
   useEffect(() => {
     if (existing) {
@@ -82,6 +83,12 @@ const CustomerForm: React.FC = () => {
       setMunicipalityCode(existing.municipalityCode || '');
       setMunicipality(existing.municipality || '');
       setHasInvoiceSettings(existing.customerType === CustomerType.Business);
+      // Initialize export settings (matches Swift initializeExportFields)
+      setHasExportInvoiceSettings(existing.hasExportInvoiceSettings || false);
+      setCodPais(existing.codPais || '');
+      setNombrePais(existing.nombrePais || '');
+      setTipoPersona(existing.tipoPersona || '');
+      setTipoDocumento(existing.tipoDocumento || '');
     }
   }, [existing]);
 
@@ -126,8 +133,10 @@ const CustomerForm: React.FC = () => {
       department,
       municipalityCode,
       municipality,
-      // Export information
+      // Export information (matches Swift FacturaExportacionSection)
+      hasExportInvoiceSettings,
       codPais: hasExportInvoiceSettings ? codPais : undefined,
+      nombrePais: hasExportInvoiceSettings ? nombrePais : undefined,
       tipoPersona: hasExportInvoiceSettings ? tipoPersona : undefined,
       tipoDocumento: hasExportInvoiceSettings ? tipoDocumento : undefined,
       shouldSyncToCloud: !currentCompany.isTestAccount, // Like Swift: isProductionCompany
@@ -374,11 +383,12 @@ const CustomerForm: React.FC = () => {
               value={codPais}
               onSelect={(option) => {
                 setCodPais(option?.code || '');
+                setNombrePais(option?.description || ''); // Also save country name like Swift
               }}
             />
 
             <CatalogDropdown
-              catalogId={GovernmentCatalogId.DOCUMENT_TYPES}
+              catalogId={GovernmentCatalogId.PERSON_TYPES}
               label="Tipo de Persona"
               placeholder="Seleccionar Tipo de Persona"
               value={tipoPersona}

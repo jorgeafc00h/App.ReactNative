@@ -18,9 +18,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../../hooks/useTheme';
 import { Company } from '../../types/company';
+import { useDispatch } from 'react-redux';
+import { updateCompanyLocal } from '../../store/slices/companySlice';
 import { InvoiceService } from '../../services/api/InvoiceService';
 import { SecureStorageService } from '../../services/security/SecureStorageService';
-import CryptoJS from 'crypto-js';
+import { isProductionCompany } from '../../utils/companyEnvironment';
 
 interface HaciendaCredentialsModalProps {
   visible: boolean;
@@ -42,6 +44,7 @@ export const HaciendaCredentialsModal: React.FC<HaciendaCredentialsModalProps> =
   onCredentialsUpdated,
 }) => {
   const { theme } = useTheme();
+  const dispatch = useDispatch();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isValidating, setIsValidating] = useState(false);
@@ -50,8 +53,7 @@ export const HaciendaCredentialsModal: React.FC<HaciendaCredentialsModalProps> =
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showCredentialsChecker, setShowCredentialsChecker] = useState(false);
 
-  // isProduction is the inverse of isTestAccount (matches Swift Company.isProduction)
-  const isProduction = !company.isTestAccount;
+  const isProduction = isProductionCompany(company);
   const invoiceService = new InvoiceService(isProduction);
 
   useEffect(() => {
@@ -110,15 +112,6 @@ export const HaciendaCredentialsModal: React.FC<HaciendaCredentialsModalProps> =
     onClose();
   };
 
-  const encryptPassword = (pwd: string): string => {
-    try {
-      const hash = CryptoJS.SHA512(pwd);
-      return hash.toString(CryptoJS.enc.Hex);
-    } catch (error) {
-      console.error('Error encrypting password:', error);
-      throw new Error('Failed to encrypt password');
-    }
-  };
 
   const validateAndUpdateCredentials = async () => {
     // Validation
@@ -148,22 +141,31 @@ export const HaciendaCredentialsModal: React.FC<HaciendaCredentialsModalProps> =
           onPress: async () => {
             setIsValidating(true);
             try {
-              // Encrypt password
-              const encryptedPassword = encryptPassword(password);
-              
-              // Validate with government API
+              // Validate with government API using PLAIN TEXT password
+              // Note: validateCredentials expects plain text, only certificate passwords are encrypted
               const isValid = await invoiceService.validateCredentials(
                 company.nit!,
-                encryptedPassword,
+                password, // Send as plain text - matches Swift implementation
                 true // Force refresh
               );
 
               if (isValid) {
-                // Store encrypted credentials securely
+                // Store government credentials as PLAIN TEXT (matches Swift implementation)
+                // Note: Only certificate passwords are encrypted - government credentials are stored as plain text
                 await SecureStorageService.storeCredentials(company.nit!, {
                   user: company.nit!,
-                  password: encryptedPassword,
+                  password: password, // Store as plain text - matches Swift exactly
                 });
+                
+                // Update Redux store with plain text password (matches Swift implementation)
+                dispatch(updateCompanyLocal({
+                  id: company.id,
+                  updates: {
+                    credentials: password, // Store as plain text in Redux - matches Swift
+                    hasApiCredentials: true,
+                    updatedAt: new Date().toISOString()
+                  }
+                }));
                 
                 Alert.alert('Éxito', 'Credenciales actualizadas correctamente');
                 onCredentialsUpdated(true);

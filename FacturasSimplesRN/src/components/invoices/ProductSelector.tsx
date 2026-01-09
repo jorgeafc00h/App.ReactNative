@@ -8,8 +8,8 @@ import {
   TouchableOpacity,
   FlatList,
   TextInput,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../hooks/useTheme';
 import { Product } from '../../types/product';
 

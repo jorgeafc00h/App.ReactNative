@@ -18,6 +18,7 @@ import { CertificateUpload } from '../CertificateUpload';
 import { CatalogDropdown } from '../CatalogDropdown';
 import { LocationDropdowns, LocationData } from '../LocationDropdowns';
 import { GovernmentCatalogId } from '../../types/catalog';
+import { CertificateCredentialsModal } from '../modals/CertificateCredentialsModal';
 
 export interface CompanyConfigurationFormProps {
   /** Current step (1-4) */
@@ -78,6 +79,9 @@ export const CompanyConfigurationForm: React.FC<CompanyConfigurationFormProps> =
   
   // Track if we've initialized forms to prevent loops
   const [formsInitialized, setFormsInitialized] = useState(false);
+  
+  // Certificate modal state
+  const [showCertificateModal, setShowCertificateModal] = useState(false);
 
   // Step 1: Basic Company Info (matches AddCompanyView)
   const [fiscalData, setFiscalData] = useState({
@@ -324,7 +328,7 @@ export const CompanyConfigurationForm: React.FC<CompanyConfigurationFormProps> =
               style={[styles.input, styles.optionalField]}
               value={fiscalData.nit}
               onChangeText={(text) => setFiscalData({...fiscalData, nit: text})}
-              placeholder="Ej: 06142903871106"
+              placeholder="Ej: 06140000106"
               keyboardType="numeric"
               maxLength={14}
             />
@@ -597,63 +601,30 @@ export const CompanyConfigurationForm: React.FC<CompanyConfigurationFormProps> =
           <Text style={styles.linkText}>Hacienda Facturación Electrónica</Text>
         </TouchableOpacity>
 
-        {/* Certificate Selection */}
+        {/* Certificate Configuration Button */}
         <TouchableOpacity 
           style={styles.certificateButton}
           onPress={() => {
-            // Handle certificate selection
-            console.log('Select certificate');
+            setShowCertificateModal(true);
           }}
         >
           <Text style={styles.certificateButtonText}>
-            {certificateData.certificatePath ? 'Certificado Seleccionado' : 'Seleccionar Certificado'}
+            {certificateData.certificatePath ? 'Certificado Configurado' : 'Configurar Certificado'}
           </Text>
         </TouchableOpacity>
 
-        {/* Certificate Password */}
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Contraseña Certificado</Text>
-          <TextInput
-            style={styles.input}
-            value={certificateData.password}
-            onChangeText={(text) => setCertificateData({...certificateData, password: text})}
-            placeholder="Contraseña Certificado"
-            secureTextEntry
-            keyboardType="default"
-          />
-        </View>
+        {/* Certificate Status */}
+        {certificateData.certificatePath && (
+          <View style={styles.statusContainer}>
+            <Text style={styles.statusText}>✅ Certificado configurado</Text>
+          </View>
+        )}
 
-        {/* Confirm Certificate Password */}
-        <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Confirmar Contraseña Certificado</Text>
-          <TextInput
-            style={[
-              styles.input,
-              certificateData.password !== certificateData.confirmPassword && certificateData.confirmPassword.length > 0 
-                ? styles.errorField 
-                : null
-            ]}
-            value={certificateData.confirmPassword}
-            onChangeText={(text) => setCertificateData({...certificateData, confirmPassword: text})}
-            placeholder="Confirmar Contraseña Certificado"
-            secureTextEntry
-            keyboardType="default"
-          />
-        </View>
+        <Text style={styles.infoText}>
+          Use el botón "Configurar Certificado" para cargar su archivo .p12/.pfx y configurar la contraseña de forma segura.
+        </Text>
 
-        {/* Update Certificate Credentials */}
-        <TouchableOpacity 
-          style={styles.updateButton}
-          onPress={() => {
-            if (certificateData.password !== certificateData.confirmPassword) {
-              Alert.alert('Error', 'Las contraseñas no coinciden');
-              return;
-            }
-            console.log('Update certificate credentials');
-          }}
-        >
-          <Text style={styles.updateButtonText}>Actualizar contraseña</Text>
-        </TouchableOpacity>
+
       </View>
     </ScrollView>
   );
@@ -761,6 +732,41 @@ export const CompanyConfigurationForm: React.FC<CompanyConfigurationFormProps> =
           </TouchableOpacity>
         </LinearGradient>
       </View>
+
+      {/* Certificate Credentials Modal */}
+      {showCertificateModal && (
+        <CertificateCredentialsModal
+          visible={showCertificateModal}
+          company={currentCompany || {
+            id: 'temp-company-onboarding',
+            nit: companyData.nit || fiscalData.nit || '',
+            nombreComercial: companyData.nombreComercial || fiscalData.nombreComercial || 'Nueva Empresa',
+            certificatePath: companyData.certificatePath || '',
+            certificatePassword: companyData.certificatePassword || '',
+            isTestAccount: companyData.environment !== CompanyEnvironment.Production
+          } as any}
+          onClose={() => setShowCertificateModal(false)}
+          onCredentialsUpdated={(isValid) => {
+            if (isValid) {
+              // Update certificate data when credentials are successfully updated
+              setCertificateData(prev => ({
+                ...prev,
+                certificatePath: 'configured',
+                password: 'stored_securely', // Indicate that password is stored
+                confirmPassword: 'stored_securely'
+              }));
+              
+              // Also update the parent company data
+              setCompanyData(prev => ({
+                ...prev,
+                certificatePath: 'configured',
+                certificatePassword: 'encrypted_and_stored'
+              }));
+            }
+            setShowCertificateModal(false);
+          }}
+        />
+      )}
     </View>
   );
 };
@@ -1021,6 +1027,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#4A5568',
+  },
+  statusContainer: {
+    backgroundColor: '#F0FFF4',
+    borderColor: '#68D391',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginVertical: 8,
+  },
+  statusText: {
+    color: '#38A169',
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#4A5568',
+    textAlign: 'center',
+    marginTop: 12,
+    fontStyle: 'italic',
+  },
+  warningText: {
+    fontSize: 16,
+    color: '#E53E3E',
+    textAlign: 'center',
+    padding: 20,
   },
   centerContent: {
     justifyContent: 'center',

@@ -1,8 +1,9 @@
 // Complete Invoice Service for Government DTE API Integration
 // Based on SwiftUI InvoiceServiceClient implementation
 
-import { HttpClient, ApiError } from './HttpClient';
-import { API_CONFIG, API_HEADERS } from '../../config/api';
+import { HttpClient, ApiError, getHttpClient } from './HttpClient';
+import { API_CONFIG, API_HEADERS, getApiConfig } from '../../config/api';
+import { deepOmitUndefined } from '../../utils/json';
 import { 
   DTE_Base, 
   DTEResponseWrapper, 
@@ -24,7 +25,7 @@ export class InvoiceService {
   private isProduction: boolean;
 
   constructor(isProduction: boolean = false) {
-    this.httpClient = new HttpClient(isProduction);
+    this.httpClient = getHttpClient(isProduction); // Use singleton
     this.isProduction = isProduction;
   }
 
@@ -41,6 +42,15 @@ export class InvoiceService {
       
       // Format the DTE with proper date formatting (ISO8601 date-only)
       const formattedDTE = this.formatDTEDates(dte);
+      // Mirror Swift Codable: omit any optional fields that are absent.
+      const sanitizedDTE = deepOmitUndefined(formattedDTE);
+
+      // Backend schema note:
+      // For Factura (tipoDte='01'), some validators treat a missing array as an empty array
+      // and enforce minItems. Sending explicit null avoids accidentally validating an empty list.
+      if (sanitizedDTE.identificacion?.tipoDte === '01' && (sanitizedDTE as any).documentoRelacionado === undefined) {
+        (sanitizedDTE as any).documentoRelacionado = null;
+      }
       
       // Determine the correct endpoint based on document type
       const endpoint = this.getDTEEndpoint(dte.identificacion.tipoDte);
@@ -55,11 +65,11 @@ export class InvoiceService {
         [API_HEADERS.CONTENT_TYPE]: 'application/json'
       };
 
-      console.log('DTE JSON:', JSON.stringify(formattedDTE, null, 2));
+      console.log('DTE JSON:', JSON.stringify(sanitizedDTE, null, 2));
 
       const response = await this.httpClient.post<DTEResponseWrapper>(
         endpoint,
-        formattedDTE,
+        sanitizedDTE,
         { headers }
       );
 
@@ -70,10 +80,10 @@ export class InvoiceService {
       console.error('❌ InvoiceService: DTE submission failed', error);
       
       // Handle DTE-specific error responses (same as Swift)
-      if (error instanceof ApiError && error.originalError?.response?.data) {
+      // ApiError.details contains the raw server response body (see HttpClient.createApiError).
+      if (error instanceof ApiError && error.details) {
         try {
-          const errorData = error.originalError.response.data;
-          const dteError: DTEErrorResponseWrapper = errorData;
+          const dteError: DTEErrorResponseWrapper = error.details as DTEErrorResponseWrapper;
           
           if (dteError.observaciones && Array.isArray(dteError.observaciones)) {
             const errors = [...dteError.observaciones];
@@ -161,22 +171,37 @@ export class InvoiceService {
 
   /**
    * Validate certificate with government API
-   * Matches Swift implementation
+   * Matches Swift implementation with early validation
    */
   async validateCertificate(
     nit: string,
     certificateKey: string
   ): Promise<boolean> {
     try {
+      // Early validation: avoid API call if certificateKey is empty or invalid
+      if (!certificateKey || typeof certificateKey !== 'string' || certificateKey.trim() === '') {
+        console.log('⚠️ InvoiceService: Certificate validation skipped - empty or invalid certificateKey');
+        return false;
+      }
+
+      // Early validation: avoid API call if NIT is empty or invalid
+      if (!nit || typeof nit !== 'string' || nit.trim() === '') {
+        console.log('⚠️ InvoiceService: Certificate validation skipped - empty or invalid NIT');
+        return false;
+      }
+
       console.log('🔍 InvoiceService: Validating certificate');
 
       const headers = {
-        'apiKey': process.env.REACT_APP_API_KEY || '',
-        'certificateKey': certificateKey,
-        'mhUser': nit
+        [API_HEADERS.API_KEY]: API_CONFIG.apiKey,
+        [API_HEADERS.CERTIFICATE_KEY]: certificateKey.trim(), // Ensure no leading/trailing whitespace
+        [API_HEADERS.MH_USER]: nit.trim()
       };
 
-      const response = await this.httpClient.post<string>(
+      console.log('InvoiceService: Sending certificate validation request');
+      console.log('Headers:', { ...headers, [API_HEADERS.CERTIFICATE_KEY]: '[REDACTED]' }); // Don't log the actual key
+
+      const response = await this.httpClient.post<unknown>(
         '/settings/certificate/validate',
         {},
         { headers }
@@ -194,7 +219,8 @@ export class InvoiceService {
 
   /**
    * Validate government credentials (NIT/password)
-   * Matches Swift implementation
+   * Sends password as PLAIN TEXT to match Swift implementation exactly
+   * Note: Only certificate passwords are hashed - credential passwords are sent as plain text
    */
   async validateCredentials(
     nit: string, 
@@ -202,14 +228,38 @@ export class InvoiceService {
     forceRefresh: boolean = false
   ): Promise<boolean> {
     try {
-      console.log('🔐 InvoiceService: Validating credentials');
+      // Early validation: avoid API call if credentials are empty or invalid
+      if (!nit || typeof nit !== 'string' || nit.trim() === '') {
+        console.log('⚠️ InvoiceService: Credential validation skipped - empty or invalid NIT');
+        return false;
+      }
+
+      if (!password || typeof password !== 'string' || password.trim() === '') {
+        console.log('⚠️ InvoiceService: Credential validation skipped - empty or invalid password');
+        return false;
+      }
+
+      console.log(`🔐 InvoiceService: Validating credentials for NIT: ${nit.trim()}`);
+      
+      const endpoint = `/account/validate?forceRefresh=${forceRefresh}`;
+      const baseURL = this.httpClient.getBaseURL();
+      const fullURL = `${baseURL}${endpoint}`;
+
+      console.log(`🌐 InvoiceService: Full URL: ${fullURL}`);
+      console.log(`🏭 InvoiceService: Environment: ${this.isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
 
       const headers = {
-        'apiKey': process.env.REACT_APP_API_KEY || '',
-        'mhUser': nit,
-        'mhKey': password,
-        'Content-Type': 'application/json'
+        [API_HEADERS.API_KEY]: API_CONFIG.apiKey,
+        [API_HEADERS.MH_USER]: nit.trim(),
+        [API_HEADERS.MH_KEY]: password, // PLAIN TEXT password - matches Swift exactly
+        [API_HEADERS.CONTENT_TYPE]: 'application/json'
       };
+
+     console.log('InvoiceService: Sending credential validation request');
+     console.log('Headers (password redacted):', { 
+       ...headers, 
+       [API_HEADERS.MH_KEY]: '[REDACTED]' 
+     });
 
       await this.httpClient.get(
         `/account/validate?forceRefresh=${forceRefresh}`,
@@ -290,10 +340,9 @@ export class InvoiceService {
       console.error('❌ InvoiceService: Document invalidation failed', error);
       
       // Handle DTE-specific errors (same pattern as submitDTE)
-      if (error instanceof ApiError && error.originalError?.response?.data) {
+      if (error instanceof ApiError && error.details) {
         try {
-          const errorData = error.originalError.response.data;
-          const dteError: DTEErrorResponseWrapper = errorData;
+          const dteError: DTEErrorResponseWrapper = error.details as DTEErrorResponseWrapper;
           
           if (dteError.observaciones && Array.isArray(dteError.observaciones)) {
             const errors = [...dteError.observaciones];
@@ -669,7 +718,8 @@ export class InvoiceService {
    */
   setEnvironment(isProduction: boolean): void {
     this.isProduction = isProduction;
-    this.httpClient = new HttpClient(isProduction);
+    // Keep behavior consistent with constructor (singleton-per-environment)
+    this.httpClient = getHttpClient(isProduction);
   }
 
   /**
@@ -677,6 +727,8 @@ export class InvoiceService {
    * Matches Swift implementation
    */
   getEnvironmentCode(): string {
-    return this.isProduction ? 'PROD' : 'DEV';
+    // Must match Swift `Constants.EnvironmentCode_PRD` / `Constants.EnvironmentCode`
+    // and API config expectations: production='01', development='00'
+    return getApiConfig(this.isProduction).environmentCode;
   }
 }

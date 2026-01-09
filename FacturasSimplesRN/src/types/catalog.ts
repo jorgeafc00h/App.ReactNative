@@ -27,13 +27,14 @@ export enum GovernmentCatalogId {
   DEPARTMENTS = 'CAT-012', // Departments (departamentos) - matches Swift
   MUNICIPALITIES = 'CAT-013', // Municipalities (municipios) - matches Swift  
   ECONOMIC_ACTIVITIES = 'CAT-019', // Economic activities
-  DOCUMENT_TYPES = 'CAT-017', // Document types
+  DOCUMENT_TYPES = 'CAT-022', // Document types - fixed to match Swift
   PAYMENT_FORMS = 'CAT-016', // Payment forms
   PAYMENT_METHODS = 'CAT-018', // Payment methods
   UNIT_OF_MEASURE = 'CAT-014', // Units of measure
   TAX_CODES = 'CAT-015', // Tax codes
   ITEM_TYPES = 'CAT-002', // Item types
-  COUNTRIES = 'CAT-011', // Countries - was incorrectly CAT-013
+  COUNTRIES = 'CAT-020', // Countries - fixed to match Swift
+  PERSON_TYPES = 'CAT-029', // Person types (Tipo de Persona) - added from Swift  
   CURRENCIES = 'CAT-021', // Currencies
   INVALID_REASONS = 'CAT-025', // Invalidation reasons
   CONTINGENCY_TYPES = 'CAT-026', // Contingency types

@@ -40,6 +40,7 @@ import {
 import { InvoiceService } from '../../services/api/InvoiceService';
 import { getCertificateService } from '../../services/security/CertificateService';
 import { getPDFGenerationService } from '../../services/pdf/PDFGenerationService';
+import { isProductionCompany } from '../../utils/companyEnvironment';
 
 import {
   InvoiceType,
@@ -113,10 +114,12 @@ export const AddInvoiceScreenEnhanced: React.FC = () => {
   const products = useAppSelector(selectAllProducts);
   const currentCompany = useAppSelector(selectCurrentCompany);
 
+  const isProduction = isProductionCompany(currentCompany);
+
   // Services
-  const invoiceService = useMemo(() => new InvoiceService(false), []);
-  const certificateService = useMemo(() => getCertificateService(false), []);
-  const pdfService = useMemo(() => getPDFGenerationService(false), []);
+  const invoiceService = useMemo(() => new InvoiceService(isProduction), [isProduction]);
+  const certificateService = useMemo(() => getCertificateService(isProduction), [isProduction]);
+  const pdfService = useMemo(() => getPDFGenerationService(isProduction), [isProduction]);
 
   // Refs
   const scrollViewRef = useRef<ScrollView>(null);

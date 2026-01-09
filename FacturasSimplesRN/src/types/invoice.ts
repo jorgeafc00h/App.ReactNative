@@ -36,6 +36,8 @@ export interface Invoice {
   relatedId?: string;
   relatedDocumentDate?: Date;
   invalidatedViaApi: boolean;
+  invalidatedAt?: string;
+  invalidationReason?: string;
   isHelperForCreditNote: boolean;
   // Delivery info for remission notes
   nombEntrega: string;
@@ -104,6 +106,9 @@ export interface UpdateInvoiceInput extends Partial<CreateInvoiceInput> {
   controlNumber?: string;
   receptionSeal?: string;
   totals?: InvoiceCalculations;
+  invalidatedViaApi?: boolean;
+  invalidatedAt?: string;
+  invalidationReason?: string;
 }
 
 // Computed properties helpers

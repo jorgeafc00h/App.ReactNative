@@ -21,6 +21,8 @@ import { Company, CompanyEnvironment } from '../../types/company';
 import { ModernSettingsCard } from '../../components/ModernSettingsCard';
 import { InvoiceService } from '../../services/api/InvoiceService';
 import { CertificateService } from '../../services/security/CertificateService';
+import { SecureStorageService } from '../../services/security/SecureStorageService';
+import { isProductionCompany } from '../../utils/companyEnvironment';
 
 // Import modals
 import {
@@ -49,10 +51,10 @@ const CompanyDetailsScreen: React.FC = () => {
 
   const company = companies.find(c => c.id === companyId);
   const isSelected = currentCompany?.id === companyId;
-  // Matches Swift: company.isTestAccount - true means test/development environment
-  const isTestAccount = company?.isTestAccount ?? (company?.environment === CompanyEnvironment.Development);
-  // Computed isProduction - matches Swift Company.isProduction computed property
-  const isProduction = !isTestAccount;
+  const isProduction = isProductionCompany(company);
+  // Matches Swift semantics: true means test/development environment
+  const isTestAccount = company?.isTestAccount === true || !isProduction;
+  
 
   // Validation status states - matches Swift's viewModel states
   const [isLoadingCertificateStatus, setIsLoadingCertificateStatus] = useState(false);
@@ -121,10 +123,17 @@ const CompanyDetailsScreen: React.FC = () => {
     setCredentialsStatus('loading');
     
     try {
+      // Get plain text credentials from secure storage (matches Swift implementation)
+      const storedCredentials = await SecureStorageService.getCredentials(company.nit);
+      if (!storedCredentials?.password) {
+        setCredentialsStatus('invalid');
+        return;
+      }
+      
       const invoiceService = new InvoiceService(isProduction);
       const isValid = await invoiceService.validateCredentials(
         company.nit,
-        company.credentials || '',
+        storedCredentials.password, // Use plain text password from storage
         false // forceRefresh
       );
       

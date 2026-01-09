@@ -5,9 +5,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppDispatch, useAppSelector } from '../store';
 import { initializeApp } from '../store/slices/appSlice';
 import { initializeDefaultCompany } from '../store/slices/companySlice';
-import { syncCatalogs } from '../store/slices/catalogSlice';
+import { loadCatalogsIntelligently } from '../store/slices/catalogSlice';
 import { selectIsAppInitialized, selectIsOnline } from '../store/selectors/appSelectors';
 import { selectIsAuthenticated, selectIsGuestMode } from '../store/selectors/authSelectors';
+import { setGuestMode } from '../store/slices/authSlice';
 import { LoadingSpinner } from './common/LoadingSpinner';
 import { AppNavigator } from '../navigation/AppNavigator';
 import { WelcomeContainer } from '../screens/auth/WelcomeContainer';
@@ -35,11 +36,11 @@ export const MainApp: React.FC = () => {
 
   useEffect(() => {
     if (isInitialized && isOnline) {
-      // Sync catalogs on app start with error handling
-      dispatch(syncCatalogs({}))
+      // Load catalogs intelligently (with caching) on app start with error handling
+      dispatch(loadCatalogsIntelligently({}))
         .unwrap()
         .catch((error) => {
-          console.warn('MainApp: Failed to sync catalogs on startup:', error);
+          console.warn('MainApp: Failed to load catalogs on startup:', error);
           // Don't block app startup for catalog sync failures
         });
     }
@@ -50,7 +51,8 @@ export const MainApp: React.FC = () => {
     if (isInitialized && (isAuthenticated || isGuestMode)) {
       console.log('MainApp: Checking if default company selection needed...', {
         companiesCount: companies.length,
-        hasCurrentCompany: !!currentCompany
+        hasCurrentCompany: !!currentCompany,
+        currentCompanyId: currentCompany?.id
       });
       // Initialize default company selection if companies exist but no current company selected
       if (companies.length > 0 && !currentCompany) {
@@ -58,7 +60,27 @@ export const MainApp: React.FC = () => {
         dispatch(initializeDefaultCompany());
       }
     }
-  }, [isInitialized, isAuthenticated, isGuestMode, companies.length, dispatch]);
+  }, [isInitialized, isAuthenticated, isGuestMode, companies.length, currentCompany, dispatch]);
+
+  // Auto-complete onboarding if companies exist but onboarding flag not set
+  useEffect(() => {
+    if (!hasSeenOnboarding && companies.length > 0) {
+      console.log('MainApp: Companies exist, auto-completing onboarding');
+      handleOnboardingComplete();
+    }
+  }, [hasSeenOnboarding, companies.length]);
+
+  // Handle data inconsistency - auto-enable guest mode if onboarding completed but not authenticated
+  useEffect(() => {
+    const hasCompletedOnboardingButNotAuthenticatedOrGuest = hasSeenOnboarding && !isAuthenticated && !isGuestMode;
+    if (hasCompletedOnboardingButNotAuthenticatedOrGuest) {
+      console.log('MainApp: Data inconsistency detected - onboarding completed but not authenticated/guest');
+      console.log('MainApp: This may indicate a persistence issue or auth state loss');
+      console.log('MainApp: Auto-enabling guest mode to allow access to main app');
+      console.log('MainApp: Enabling guest mode for data recovery');
+      dispatch(setGuestMode(true));
+    }
+  }, [hasSeenOnboarding, isAuthenticated, isGuestMode, dispatch]);
 
   const checkOnboardingStatus = async () => {
     try {
@@ -89,13 +111,12 @@ export const MainApp: React.FC = () => {
   // If companies exist, user has completed setup even if onboarding flag isn't set
   const shouldShowOnboarding = !hasSeenOnboarding && companies.length === 0;
   
-  // Handle edge case: user completed onboarding but companies got lost (data recovery)
-  const hasCompletedOnboardingButNoCompanies = hasSeenOnboarding && companies.length === 0;
+  // Handle edge case: user completed onboarding but lost auth state (data recovery)
+  // This is now handled by useEffect above to avoid setState during render
+  const hasCompletedOnboardingButNotAuthenticatedOrGuest = hasSeenOnboarding && !isAuthenticated && !isGuestMode;
   
-  if (hasCompletedOnboardingButNoCompanies) {
-    console.log('MainApp: Data inconsistency detected - onboarding completed but no companies found');
-    console.log('MainApp: This may indicate a persistence issue or data loss');
-    console.log('MainApp: Proceeding to main app - user can create companies from "Administracion de empresas"');
+  if (hasCompletedOnboardingButNotAuthenticatedOrGuest) {
+    return <LoadingSpinner text="Recovering app state..." />;
   }
   
   console.log('MainApp: Navigation decision - hasSeenOnboarding:', hasSeenOnboarding, 'companies:', companies.length, 'currentCompany:', currentCompany?.nombreComercial);
@@ -105,10 +126,8 @@ export const MainApp: React.FC = () => {
     return <OnboardingScreen onComplete={handleOnboardingComplete} />;
   }
   
-  // If companies exist but onboarding flag not set, auto-complete onboarding
+
   if (!hasSeenOnboarding && companies.length > 0) {
-    console.log('MainApp: Companies exist, auto-completing onboarding');
-    handleOnboardingComplete();
     return <LoadingSpinner text="Initializing..." />;
   }
 

@@ -18,14 +18,19 @@ const initialState: CatalogState = {
 // Async thunks
 export const syncCatalogs = createAsyncThunk(
   'catalogs/syncCatalogs',
-  async (params: { force?: boolean } = {}, { rejectWithValue }) => {
+  async (params: { force?: boolean } = {}, { rejectWithValue, getState }) => {
     try {
       const catalogService = getCatalogService();
       
       // Check if sync is needed (unless forced)
       if (!params?.force) {
         const shouldSync = await catalogService.shouldSync();
-        if (!shouldSync) {
+        
+        // Also check if we have catalogs in Redux store
+        const state = getState() as any;
+        const hasLocalCatalogs = state.catalogs.catalogs.length > 0;
+        
+        if (!shouldSync && hasLocalCatalogs) {
           console.log('📋 CatalogService: Catalogs are up to date, skipping sync');
           // Return empty result instead of throwing error
           return {
@@ -37,6 +42,9 @@ export const syncCatalogs = createAsyncThunk(
       }
 
       const catalogs = await catalogService.getCatalogs();
+      
+      // Update last sync date after successful fetch
+      await catalogService.updateLastSyncDate();
       
       return {
         catalogs,
@@ -106,6 +114,49 @@ export const getCatalogStats = createAsyncThunk(
   }
 );
 
+export const loadCatalogsIntelligently = createAsyncThunk(
+  'catalogs/loadCatalogsIntelligently',
+  async (params: { isProduction?: boolean; force?: boolean } = {}, { rejectWithValue, getState, dispatch }) => {
+    try {
+      const catalogService = getCatalogService(params.isProduction);
+      const state = getState() as any;
+      const hasLocalCatalogs = state.catalogs.catalogs.length > 0;
+      
+      console.log('📋 CatalogSlice: Loading catalogs intelligently');
+      console.log(`📋 Local catalogs available: ${hasLocalCatalogs}`);
+      
+      // Check if sync is needed (unless forced)
+      if (!params?.force) {
+        const shouldSync = await catalogService.shouldSync();
+        
+        if (!shouldSync && hasLocalCatalogs) {
+          console.log('📋 CatalogSlice: Using cached catalogs, no sync needed');
+          return {
+            catalogs: state.catalogs.catalogs,
+            syncDate: state.catalogs.lastFullSync || new Date().toISOString(),
+            fromCache: true
+          };
+        }
+      }
+      
+      // Sync needed or forced
+      console.log('📋 CatalogSlice: Fetching fresh catalogs from API');
+      const freshCatalogs = await catalogService.getCatalogs();
+      
+      // Update last sync date after successful fetch
+      await catalogService.updateLastSyncDate();
+      
+      return {
+        catalogs: freshCatalogs,
+        syncDate: new Date().toISOString(),
+        fromCache: false
+      };
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to load catalogs');
+    }
+  }
+);
+
 // Slice
 const catalogSlice = createSlice({
   name: 'catalogs',
@@ -167,8 +218,16 @@ const catalogSlice = createSlice({
     
     // Cache catalogs locally (for offline access)
     cacheCatalogs: (state, action: PayloadAction<Catalog[]>) => {
-      // TODO: Implement local caching logic
-      console.log('Caching catalogs locally:', action.payload.length);
+      state.catalogs = action.payload;
+      state.lastFullSync = new Date().toISOString();
+      console.log('📋 Cached catalogs locally:', action.payload.length);
+    },
+    
+    // Check if catalogs are available offline
+    checkOfflineAvailability: (state) => {
+      // Update availability based on existing catalogs
+      const isAvailable = state.catalogs.length > 0;
+      console.log(`📱 Catalogs offline availability: ${isAvailable}`);
     },
   },
   extraReducers: (builder) => {
@@ -180,18 +239,22 @@ const catalogSlice = createSlice({
       })
       .addCase(syncCatalogs.fulfilled, (state, action) => {
         state.loading = false;
-        state.catalogs = action.payload.catalogs;
-        state.lastFullSync = action.payload.syncDate;
         
-        // Update sync info for all catalogs
-        action.payload.catalogs.forEach(catalog => {
-          state.syncInfo[catalog.id] = {
-            catalogId: catalog.id,
-            lastSyncDate: action.payload.syncDate,
-            status: 'SUCCESS',
-            recordCount: catalog.options.length,
-          };
-        });
+        // Only update catalogs if we actually fetched new data (not skipped)
+        if (!action.payload.skipped) {
+          state.catalogs = action.payload.catalogs;
+          state.lastFullSync = action.payload.syncDate;
+          
+          // Update sync info for all catalogs
+          action.payload.catalogs.forEach((catalog: Catalog) => {
+            state.syncInfo[catalog.id] = {
+              catalogId: catalog.id,
+              lastSyncDate: action.payload.syncDate,
+              status: 'SUCCESS',
+              recordCount: catalog.options.length,
+            };
+          });
+        }
       })
       .addCase(syncCatalogs.rejected, (state, action) => {
         state.loading = false;
@@ -245,6 +308,38 @@ const catalogSlice = createSlice({
           }
         });
       });
+
+    // Load catalogs intelligently (cache-aware)
+    builder
+      .addCase(loadCatalogsIntelligently.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(loadCatalogsIntelligently.fulfilled, (state, action) => {
+        state.loading = false;
+        
+        if (action.payload.fromCache) {
+          console.log('📋 CatalogSlice: Loaded from cache');
+        } else {
+          console.log('📋 CatalogSlice: Loaded fresh data from API');
+          state.catalogs = action.payload.catalogs;
+          state.lastFullSync = action.payload.syncDate;
+          
+          // Update sync info for all catalogs
+          action.payload.catalogs.forEach((catalog: Catalog) => {
+            state.syncInfo[catalog.id] = {
+              catalogId: catalog.id,
+              lastSyncDate: action.payload.syncDate,
+              status: 'SUCCESS',
+              recordCount: catalog.options.length,
+            };
+          });
+        }
+      })
+      .addCase(loadCatalogsIntelligently.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
   },
 });
 
@@ -259,6 +354,18 @@ export const {
   failCatalogSync,
   resetCatalogs,
   cacheCatalogs,
+  checkOfflineAvailability,
 } = catalogSlice.actions;
+
+// Note: loadCatalogsIntelligently is exported above with createAsyncThunk
+
+// Selectors
+export const selectCatalogs = (state: any) => state.catalogs.catalogs;
+export const selectCatalogById = (state: any, catalogId: string) => 
+  state.catalogs.catalogs.find((catalog: Catalog) => catalog.id === catalogId);
+export const selectCatalogsAvailableOffline = (state: any) => 
+  state.catalogs.catalogs.length > 0;
+export const selectLastFullSync = (state: any) => state.catalogs.lastFullSync;
+export const selectCatalogLoading = (state: any) => state.catalogs.loading;
 
 export default catalogSlice.reducer;
